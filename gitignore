@@ -1,0 +1,90 @@
+# .gitignore for the OVERRIDE Unity project
+# Place this file in the project ROOT: the folder that contains Assets/, Packages/ and ProjectSettings/.
+# A leading "/" means "only at the root", so the file won't work from anywhere else.
+# [Ll] matches either case, because Windows doesn't care about case but Git does.
+# Comments must be on their own line: Git doesn't allow a "#" comment after a pattern.
+
+# ---------------------------------------------------------------
+# Folders Unity regenerates on its own. Never commit these.
+# ---------------------------------------------------------------
+# Import cache, can be gigabytes; rebuilt when the project opens
+/[Ll]ibrary/
+# Scratch files while the editor runs
+/[Tt]emp/
+# Compiler output
+/[Oo]bj/
+# Editor logs
+/[Ll]ogs/
+# Your personal editor layout and preferences, not the team's
+/[Uu]ser[Ss]ettings/
+# Memory Profiler snapshots (keep the ones you need as evidence elsewhere)
+/[Mm]emoryCaptures/
+# Unity Recorder output
+/[Rr]ecordings/
+
+# Build output
+/[Bb]uild/
+/[Bb]uilds/
+
+# ---------------------------------------------------------------
+# .meta files: ALWAYS commit them.
+# They hold each asset's ID; without them, references between assets break for teammates.
+# The "!" re-includes them in case any rule above would hide them.
+# ---------------------------------------------------------------
+!/[Aa]ssets/**/*.meta
+
+# ---------------------------------------------------------------
+# IDE and code-editor files (Visual Studio, Rider, VS Code).
+# Unity regenerates .csproj and .sln files, and each person's are different.
+# ---------------------------------------------------------------
+.vs/
+.idea/
+.vscode/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.unityproj
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+/[Aa]ssets/Plugins/Editor/JetBrains*
+
+# ---------------------------------------------------------------
+# Generated or exported files
+# ---------------------------------------------------------------
+sysinfo.txt
+crashlytics-build.properties
+*.tmp
+*.apk
+*.aab
+*.app
+*.unitypackage
+ExportedObj/
+.gradle/
+
+# Addressables build cache (only matters if the team adds Addressables later)
+/[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
+/[Aa]ssets/[Ss]treamingAssets/aa.meta
+/[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# ---------------------------------------------------------------
+# Blender backups: Blender writes model.blend1, .blend2 ... each time you save
+# ---------------------------------------------------------------
+*.blend1
+*.blend2
+
+# ---------------------------------------------------------------
+# Operating system clutter
+# ---------------------------------------------------------------
+Thumbs.db
+Desktop.ini
+.DS_Store
