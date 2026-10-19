@@ -1,5 +1,36 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &2085144485411465700
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3107709579211607859}
+  m_Layer: 0
+  m_Name: HoldPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3107709579211607859
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2085144485411465700}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.3, y: -0.25, z: 0.6}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 3347202405873501470}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &6976440318490616691
 GameObject:
   m_ObjectHideFlags: 0
@@ -13,6 +44,8 @@ GameObject:
   - component: {fileID: 7852336055879498224}
   - component: {fileID: 4106913428567370022}
   - component: {fileID: 2704211770958469374}
+  - component: {fileID: 1646690549537552182}
+  - component: {fileID: 2832581097142762126}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -124,6 +157,39 @@ MonoBehaviour:
   sprintInterval: 0.33
   minSpeed: 0.5
   drawGizmo: 1
+--- !u!114 &1646690549537552182
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6976440318490616691}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10bab8c9ac9e543748286aa1bc361a96, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Override.Interaction.PlayerInteractor
+  cameraTransform: {fileID: 3347202405873501470}
+  reach: 2.5
+  rayMask:
+    serializedVersion: 2
+    m_Bits: 307
+  showPrompt: 1
+--- !u!114 &2832581097142762126
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6976440318490616691}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 384568780dd5b4718922fc36b78ba99c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Override.Interaction.PlayerCarry
+  holdPoint: {fileID: 3107709579211607859}
+  throwSpeed: 14
+  throwLift: 2
 --- !u!1 &7269569479752688914
 GameObject:
   m_ObjectHideFlags: 0
@@ -155,7 +221,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 3107709579211607859}
   m_Father: {fileID: 3963994379284020948}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!20 &7523536975640516526
