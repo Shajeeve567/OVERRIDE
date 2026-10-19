@@ -16,6 +16,9 @@ namespace Override.Core
         /// The player lost health. Argument: damage amount. Terminals pause their hack on this.
         public static event Action<float> PlayerDamaged;
 
+        /// The player's health reached 0 (lose screen, respawn).
+        public static event Action PlayerDied;
+
         /// The player started hacking a zone's terminal for the first time (defence-wave trigger).
         public static event Action<ZoneId> HackStarted;
 
@@ -23,6 +26,7 @@ namespace Override.Core
         public static event Action<ZoneId> TerminalOverridden;
 
         public static void RaisePlayerDamaged(float amount) => PlayerDamaged?.Invoke(amount);
+        public static void RaisePlayerDied() => PlayerDied?.Invoke();
         public static void RaiseHackStarted(ZoneId zone) => HackStarted?.Invoke(zone);
         public static void RaiseTerminalOverridden(ZoneId zone) => TerminalOverridden?.Invoke(zone);
 
@@ -31,6 +35,7 @@ namespace Override.Core
         static void ResetOnPlay()
         {
             PlayerDamaged = null;
+            PlayerDied = null;
             HackStarted = null;
             TerminalOverridden = null;
         }
