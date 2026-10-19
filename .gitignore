@@ -112,3 +112,6 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Local assignment briefs and planning context (not part of the Unity project)
+/Ilzam's Agent Context/
