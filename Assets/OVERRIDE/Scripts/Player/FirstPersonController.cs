@@ -61,6 +61,8 @@ namespace Override.Player
         public MovementMode Mode { get; private set; } = MovementMode.Walk;
         public bool IsGrounded => controller.isGrounded;
         public Vector3 Velocity => controller.velocity;
+        /// Horizontal velocity the player is trying to move at, even if a wall or crate blocks it.
+        public Vector3 DesiredVelocity => horizontalVelocity;
         public bool IsSprinting => Mode == MovementMode.Sprint && horizontalVelocity.sqrMagnitude > 0.1f;
 
         /// Other systems (crate pushing, menus, death) can cap speed or freeze input.
