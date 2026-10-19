@@ -19,7 +19,7 @@ public sealed class VisionSensorTestRig : MonoBehaviour
 
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId = Shader.PropertyToID("_Color");
-    private readonly MaterialPropertyBlock _propertyBlock = new MaterialPropertyBlock();
+    private MaterialPropertyBlock _propertyBlock;
 
     private Vector3 _startPosition;
     private GUIStyle _panelStyle;
@@ -28,6 +28,7 @@ public sealed class VisionSensorTestRig : MonoBehaviour
 
     private void Awake()
     {
+        _propertyBlock = new MaterialPropertyBlock();
         if (_target != null) _startPosition = _target.position;
         UpdateTargetColour();
     }
@@ -63,6 +64,7 @@ public sealed class VisionSensorTestRig : MonoBehaviour
     private void UpdateTargetColour()
     {
         if (_targetRenderer == null || _sensor == null) return;
+        if (_propertyBlock == null) _propertyBlock = new MaterialPropertyBlock();
 
         Color colour = _sensor.CanSeeTarget
             ? new Color(0.15f, 1f, 0.25f, 1f)
