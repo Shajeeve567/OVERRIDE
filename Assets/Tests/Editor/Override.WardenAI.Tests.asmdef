@@ -1,0 +1,21 @@
+{
+    "name": "Override.WardenAI.Tests",
+    "rootNamespace": "Override.WardenAI.Tests",
+    "references": [
+        "Override.WardenAI"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}
