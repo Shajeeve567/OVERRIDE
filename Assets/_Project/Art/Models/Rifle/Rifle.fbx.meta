@@ -3,7 +3,12 @@ guid: 07205ecf7616370458f62bfc52585738
 ModelImporter:
   serializedVersion: 24300
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Rifle_Atlas
+    second: {fileID: 2100000, guid: 6dfb92cca888e6a4689e87c10358d97b, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0
