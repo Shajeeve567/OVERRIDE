@@ -193,7 +193,9 @@ namespace Override.Combat
             if (hit.rigidbody != null && !hit.rigidbody.isKinematic)
                 hit.rigidbody.AddForceAtPosition(dir * hitImpulse, hit.point, ForceMode.Impulse);
 
-            result.HitStatic = hit.rigidbody == null && target == null;
+            // Agents move with a CharacterController (Rithish's AgentMotor) and have no Rigidbody;
+            // a bullet hole left on one would float in mid-air once it walks away.
+            result.HitStatic = hit.rigidbody == null && target == null && !(hit.collider is CharacterController);
             return result;
         }
 
