@@ -1,56 +1,59 @@
 using UnityEngine;
+using Override.Core; 
 
-[RequireComponent(typeof(CharacterController))]
-public class AgentMotor : MonoBehaviour
+namespace Override.Motor
 {
-    [SerializeField] private float moveSpeed = 5f;
-    [SerializeField] private float rotationSpeed = 10f;
-
-    private IAgentBrain brain;
-    private WorldSnapshot currentSnapshot;
-    private CharacterController controller;
-
-    private void Awake()
+    [RequireComponent(typeof(CharacterController))]
+    public class AgentMotor : MonoBehaviour
     {
-        controller = GetComponent<CharacterController>();
-        // Find a component that implements IAgentBrain on this object
-        brain = GetComponent<IAgentBrain>(); 
-    }
+        [SerializeField] private float moveSpeed = 5f;
+        [SerializeField] private float rotationSpeed = 10f;
 
-    private void Update()
-    {
-        if (brain == null) return;
+        private IAgentBrain brain;
+        private CharacterController controller;
+        private Transform playerTransform;
 
-        // 1. Gather snapshot (Simplified for now. Later, get this from a shared GameManager)
-        currentSnapshot = new WorldSnapshot
+        private void Awake()
         {
-            PlayerPosition = GameObject.FindWithTag("Player")?.transform.position ?? Vector3.zero
-        };
+            controller = GetComponent<CharacterController>();
+            brain = GetComponent<IAgentBrain>(); 
+        }
 
-        // 2. Ask the brain what to do
-        AgentCommand command = brain.Tick(currentSnapshot);
-
-        // 3. Execute Movement
-        if (command.Path != null && command.Path.Length > 0)
+        private void Start()
         {
-            Vector3 targetPoint = command.Path[0];
-            Vector3 direction = (targetPoint - transform.position).normalized;
-            
-            // Move
-            controller.Move(direction * moveSpeed * Time.deltaTime);
-
-            // Rotate
-            if (direction != Vector3.zero)
+            // CACHE IT ONCE at the start
+            GameObject playerObj = GameObject.FindWithTag("Player");
+            if (playerObj != null)
             {
-                Quaternion targetRotation = Quaternion.LookRotation(direction);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+                playerTransform = playerObj.transform;
             }
+        }
 
-            // Arrival check
-            if (Vector3.Distance(transform.position, targetPoint) < 0.5f)
+        private void Update()
+        {
+            if (brain == null || playerTransform == null) return;
+
+            // No more Find() inside Update!
+            WorldSnapshot currentSnapshot = new WorldSnapshot
             {
-                // Remove this node from the path (in a real scenario, you'd shift the array)
-                // For now, just stop.
+                PlayerPosition = playerTransform.position,
+                PlayerForward = playerTransform.forward
+            };
+
+            AgentCommand command = brain.Tick(currentSnapshot);
+
+            if (command.Path != null && command.Path.Length > 0)
+            {
+                Vector3 targetPoint = command.Path[0];
+                Vector3 direction = (targetPoint - transform.position).normalized;
+                
+                controller.Move(direction * moveSpeed * Time.deltaTime);
+
+                if (direction != Vector3.zero)
+                {
+                    Quaternion targetRotation = Quaternion.LookRotation(direction);
+                    transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+                }
             }
         }
     }
