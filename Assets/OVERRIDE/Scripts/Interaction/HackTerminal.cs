@@ -18,7 +18,7 @@ namespace Override.Interaction
 
         [Header("Hack (GDD)")]
         [SerializeField] float hackDuration = 8f;     // seconds of holding E
-        [SerializeField] float useRange = 2f;         // metres from the terminal
+        [SerializeField] float useRange = 2f;         // metres from the terminal's surface
         [SerializeField] float damagePause = 1f;      // seconds progress stops after each hit
 
         [Header("Beep noise (GDD)")]
@@ -34,6 +34,7 @@ namespace Override.Interaction
         [Tooltip("Hook up zone effects here (lights turning white, ARGUS screen text).")]
         public UnityEvent onOverridden;
 
+        Collider body;           // the terminal's model collider; range is measured to its surface
         float progress;          // 0 to 1
         float beepTimer;
         float pausedUntil;
@@ -48,6 +49,8 @@ namespace Override.Interaction
 
         public string Prompt => started ? "Resume hack (hold)" : "Hack terminal (hold)";
         public bool CanInteract => !IsOverridden;
+
+        void Awake() => body = GetComponentInChildren<Collider>();
 
         void OnEnable() => GameEvents.PlayerDamaged += OnPlayerDamaged;
         void OnDisable() => GameEvents.PlayerDamaged -= OnPlayerDamaged;
@@ -72,12 +75,13 @@ namespace Override.Interaction
         public bool HoldTick(PlayerInteractor player, float deltaTime)
         {
             if (IsOverridden) return false;
-            if (Vector3.Distance(player.transform.position, transform.position) > useRange) return false;
+            if (DistanceTo(player.transform.position) > useRange) return false;
 
             beepTimer -= deltaTime;
             if (beepTimer <= 0f)
             {
-                NoiseBus.Emit(transform.position, beepRadius, NoiseKind.TerminalBeep);
+                Vector3 beepAt = body != null ? body.bounds.center : transform.position;   // from the model itself
+                NoiseBus.Emit(beepAt, beepRadius, NoiseKind.TerminalBeep);
                 beepTimer = beepInterval;
             }
 
@@ -91,6 +95,15 @@ namespace Override.Interaction
         }
 
         public void EndHold(PlayerInteractor player) => hacking = false;
+
+        /// Distance to the nearest point of the terminal's model, so moving the model (not just its parent)
+        /// still works, and the range doesn't depend on where the pivot sits.
+        float DistanceTo(Vector3 position)
+        {
+            Vector3 nearest = body != null ? body.ClosestPoint(position) : transform.position;
+            nearest.y = position.y;   // ignore height: the player's pivot is at their feet
+            return Vector3.Distance(nearest, position);
+        }
 
         void Complete()
         {
@@ -111,7 +124,8 @@ namespace Override.Interaction
         void OnDrawGizmosSelected()
         {
             Gizmos.color = Color.cyan;
-            Gizmos.DrawWireSphere(transform.position, useRange);
+            var c = GetComponentInChildren<Collider>();
+            Gizmos.DrawWireSphere(c != null ? c.bounds.center : transform.position, useRange);
         }
     }
 }
