@@ -13,6 +13,7 @@
 //     Terminals       HackTerminal + progress ring on the four placeholders (Core: 30 s, needs T1-T3)
 //     Doors           a SlidingDoor + LockableDoor in each main corridor (same table as the stand-in doors)
 //     Director        DirectorBridge, and the stand-in drone as its drone prefab until the Wisp exists
+//     Ammo crates     one beside each terminal (GDD: "ammo crates at each terminal"), prefab built if missing
 //     Cameras         SecurityCameraSensor on Shajeeve's camera prefab (sightings for the Seeker)
 //     Seeker          one Seeker in Maintenance, built by HunterSetup if the prefab doesn't exist yet
 //     Debug           NoiseDebugView + ObjectivesOverlay
@@ -80,6 +81,7 @@ namespace Override.EditorTools
             RemoveStandIns(log);
             SwapPlayer(log);
             InstallTerminals(log);
+            InstallAmmoCrates(log);
             InstallDoors(log);
             InstallDirector(log);
             log.AppendLine(HunterSetup.EnsureCameraSensors());
@@ -170,6 +172,70 @@ namespace Override.EditorTools
                 terminal.Configure(entry.zone, entry.isCore, entry.isCore ? 30f : 8f, ring);
                 EditorUtility.SetDirty(terminal);
                 log.AppendLine($"  + HackTerminal on {entry.name} ({entry.zone}{(entry.isCore ? ", 30 s, needs T1-T3" : "")})");
+            }
+        }
+
+        const string AmmoCratePrefab = "Assets/OVERRIDE/Prefabs/AmmoCrate.prefab";
+
+        /// A small metal ammo case with a teal glowing lid strip (hidden when it's empty), built from code.
+        static GameObject BuildAmmoCratePrefab()
+        {
+            var metal = AssetDatabase.LoadAssetAtPath<Material>(Mats + "Prop_Metal.mat");
+            var glow = AssetDatabase.LoadAssetAtPath<Material>(Mats + "Prop_TealGlow.mat");
+
+            var root = new GameObject("AmmoCrate");
+            var box = root.AddComponent<BoxCollider>();
+            box.center = new Vector3(0f, 0.35f, 0f);
+            box.size = new Vector3(1.0f, 0.7f, 0.7f);
+
+            var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            body.name = "Case";
+            Object.DestroyImmediate(body.GetComponent<Collider>());
+            body.transform.SetParent(root.transform, false);
+            body.transform.localPosition = new Vector3(0f, 0.35f, 0f);
+            body.transform.localScale = new Vector3(1.0f, 0.7f, 0.7f);
+            if (metal != null) body.GetComponent<Renderer>().sharedMaterial = metal;
+
+            var strip = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            strip.name = "AvailableStrip";
+            Object.DestroyImmediate(strip.GetComponent<Collider>());
+            strip.transform.SetParent(root.transform, false);
+            strip.transform.localPosition = new Vector3(0f, 0.71f, 0f);
+            strip.transform.localScale = new Vector3(0.8f, 0.03f, 0.2f);
+            if (glow != null) strip.GetComponent<Renderer>().sharedMaterial = glow;
+
+            var crate = root.AddComponent<AmmoCrate>();
+            var so = new SerializedObject(crate);
+            so.FindProperty("availableVisual").objectReferenceValue = strip;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            var prefab = PrefabUtility.SaveAsPrefabAsset(root, AmmoCratePrefab);
+            Object.DestroyImmediate(root);
+            return prefab;
+        }
+
+        static void InstallAmmoCrates(System.Text.StringBuilder log)
+        {
+            if (Object.FindFirstObjectByType<AmmoCrate>() != null) { log.AppendLine("  = ammo crates already placed"); return; }
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(AmmoCratePrefab) ?? BuildAmmoCratePrefab();
+
+            var root = new GameObject("OVERRIDE_AmmoCrates").transform;
+            Undo.RegisterCreatedObjectUndo(root.gameObject, "Install ammo crates");
+            foreach (var terminal in Object.FindObjectsByType<HackTerminal>(FindObjectsSortMode.None))
+            {
+                // Beside the terminal (its right), on the floor under it, facing the same way.
+                var t = terminal.transform;
+                var col = t.GetComponentInChildren<Collider>();
+                float floorY = col != null ? col.bounds.min.y : t.position.y;
+                Vector3 side = new Vector3(t.right.x, 0f, t.right.z).normalized;
+                float offset = (col != null ? col.bounds.extents.magnitude : 1f) + 1.0f;
+                Vector3 at = new Vector3(t.position.x, floorY, t.position.z) + side * offset;
+
+                var crate = (GameObject)PrefabUtility.InstantiatePrefab(prefab, EditorSceneManager.GetActiveScene());
+                crate.transform.SetParent(root, false);
+                crate.transform.SetPositionAndRotation(at, Quaternion.Euler(0f, t.eulerAngles.y, 0f));
+                crate.name = $"AmmoCrate ({terminal.Zone})";
+                log.AppendLine($"  + {crate.name} beside the {terminal.Zone} terminal");
             }
         }
 
