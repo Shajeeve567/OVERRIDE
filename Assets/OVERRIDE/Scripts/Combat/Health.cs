@@ -13,6 +13,8 @@ namespace Override.Combat
         [SerializeField] float maxHealth = 100f;
         [Tooltip("Tick on the player only: raises the game-wide PlayerDamaged / PlayerDied events.")]
         [SerializeField] bool isPlayer;
+        [Tooltip("TESTING ONLY: hits still register (flash, events, Director tension) but health never drops. Untick before recording.")]
+        [SerializeField] bool godMode;
 
         [Header("On death (enemies)")]
         [Tooltip("Optional pickup spawned where this dies (GDD: ammo drops from destroyed units).")]
@@ -46,7 +48,7 @@ namespace Override.Combat
         {
             if (IsDead || amount <= 0f) return;
 
-            Current = Mathf.Max(0f, Current - amount);
+            if (!godMode) Current = Mathf.Max(0f, Current - amount);
             Damaged?.Invoke(amount, hitPoint);
             if (isPlayer) GameEvents.RaisePlayerDamaged(amount);
 
