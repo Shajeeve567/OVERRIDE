@@ -264,6 +264,7 @@ MonoBehaviour:
   hackDuration: 8
   useRange: 2
   damagePause: 1
+  requiresOtherTerminals: 0
   beepRadius: 20
   beepInterval: 2
   ring: {fileID: 538612828}
@@ -282,7 +283,7 @@ Transform:
   m_GameObject: {fileID: 65959060}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -4, y: 0, z: 8}
+  m_LocalPosition: {x: 5.46, y: 0, z: 3.34}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -1787,7 +1788,7 @@ Transform:
   m_GameObject: {fileID: 575795227}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 9.63, y: 0.6, z: -4.78}
+  m_LocalPosition: {x: 0, y: 0.6, z: 0}
   m_LocalScale: {x: 0.6, y: 1.2, z: 0.4}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2271,6 +2272,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Override.Combat.HazardZone
   damagePerTick: 10
   tickInterval: 0.5
+  height: 2
 --- !u!65 &949582681
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -2523,6 +2525,7 @@ MonoBehaviour:
   isPlayer: 0
   dropOnDeath: {fileID: 2802224437076178189, guid: 83820ed91e5bf4cc5a3d6e0b208cff66, type: 3}
   disableOnDeath: 1
+  destroyOnDeath: 0
 --- !u!4 &1389140069
 Transform:
   m_ObjectHideFlags: 0
@@ -2699,6 +2702,7 @@ MonoBehaviour:
   isPlayer: 0
   dropOnDeath: {fileID: 2802224437076178189, guid: 83820ed91e5bf4cc5a3d6e0b208cff66, type: 3}
   disableOnDeath: 1
+  destroyOnDeath: 0
 --- !u!4 &1555054621
 Transform:
   m_ObjectHideFlags: 0
@@ -3261,6 +3265,7 @@ MonoBehaviour:
   isPlayer: 0
   dropOnDeath: {fileID: 2802224437076178189, guid: 83820ed91e5bf4cc5a3d6e0b208cff66, type: 3}
   disableOnDeath: 1
+  destroyOnDeath: 0
 --- !u!4 &2069883048
 Transform:
   m_ObjectHideFlags: 0
