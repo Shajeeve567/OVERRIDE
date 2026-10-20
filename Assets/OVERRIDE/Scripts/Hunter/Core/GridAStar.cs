@@ -69,29 +69,26 @@ namespace Override.HunterAI
                     return true;
                 }
 
-                int cx = grid.X(current), cz = grid.Z(current);
-                for (int dz = -1; dz <= 1; dz++)
-                    for (int dx = -1; dx <= 1; dx++)
-                    {
-                        if ((dx | dz) == 0) continue;
-                        int nx = cx + dx, nz = cz + dz;
-                        if (!grid.InBounds(nx, nz)) continue;
-                        int n = grid.Index(nx, nz);
-                        if (closedStamp[n] == stamp || !grid.Passable(n, time)) continue;
+                for (int k = 0; k < 8; k++)
+                {
+                    // An open link means nothing static (a wall, a pillar) lies between the two cells.
+                    if (!grid.HunterLinked(current, k)) continue;
+                    int n = grid.Neighbour(current, k);
+                    if (closedStamp[n] == stamp || !grid.Passable(n, time)) continue;
 
-                        bool diagonal = dx != 0 && dz != 0;
-                        // No corner cutting: both side cells of a diagonal must be open.
-                        if (diagonal && (!grid.Passable(grid.Index(cx + dx, cz), time) ||
-                                         !grid.Passable(grid.Index(cx, cz + dz), time))) continue;
+                    bool diagonal = HunterGrid.DX[k] != 0 && HunterGrid.DZ[k] != 0;
+                    // No corner cutting past a crate or closed door: both side cells must be open too.
+                    if (diagonal && (!grid.Passable(grid.Index(grid.X(current) + HunterGrid.DX[k], grid.Z(current)), time) ||
+                                     !grid.Passable(grid.Index(grid.X(current), grid.Z(current) + HunterGrid.DZ[k]), time))) continue;
 
-                        float tentative = g[current] + (diagonal ? Sqrt2 : 1f);
-                        if (seenStamp[n] == stamp && tentative >= g[n]) continue;
+                    float tentative = g[current] + (diagonal ? Sqrt2 : 1f);
+                    if (seenStamp[n] == stamp && tentative >= g[n]) continue;
 
-                        seenStamp[n] = stamp;
-                        g[n] = tentative;
-                        cameFrom[n] = current;
-                        open.Push(n, tentative + Octile(nx, nz, gx, gz));
-                    }
+                    seenStamp[n] = stamp;
+                    g[n] = tentative;
+                    cameFrom[n] = current;
+                    open.Push(n, tentative + Octile(grid.X(n), grid.Z(n), gx, gz));
+                }
             }
             return false;   // goal unreachable from here (e.g. the only way in is blocked by a crate)
         }

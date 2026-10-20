@@ -4,6 +4,9 @@
 // Two walkability masks, because the player and the Seeker fit through different gaps:
 //   PlayerWalkable  where the PLAYER might be (includes crouch-only vents), so belief may live there.
 //   HunterWalkable  where the SEEKER can travel (a 0.8 m orb hovering 1.2 m up: no vents).
+// LINKS: a thin wall can run BETWEEN two cell centres without touching either, so walkable cells are not
+// enough: each cell also stores which of its 8 neighbours it can actually move to (one bit each),
+// tested once at bake time. Both A* and the belief's spreading only use open links.
 // On top of that, Blocked marks cells covered right now by a closed door or a crate, refreshed before
 // each plan, plus cells blocked for a few seconds after the Seeker got stuck there.
 
@@ -20,6 +23,12 @@ namespace Override.HunterAI
         public readonly bool[] PlayerWalkable;
         public readonly bool[] HunterWalkable;
         public readonly float[] FloorY;          // floor height at each cell centre
+        public readonly byte[] PlayerLinks;      // bit k set = the player can move to neighbour k
+        public readonly byte[] HunterLinks;      // bit k set = the Seeker can move to neighbour k
+
+        /// Neighbour k is at (x + DX[k], z + DZ[k]). Ordered so the opposite of k is 7 − k.
+        public static readonly int[] DX = { -1, 0, 1, -1, 1, -1, 0, 1 };
+        public static readonly int[] DZ = { -1, -1, -1, 0, 0, 1, 1, 1 };
 
         readonly bool[] dynamicBlocked;
         readonly float[] blockedUntil;           // stuck recovery: cell avoided until this time
@@ -35,6 +44,8 @@ namespace Override.HunterAI
             PlayerWalkable = new bool[width * height];
             HunterWalkable = new bool[width * height];
             FloorY = new float[width * height];
+            PlayerLinks = new byte[width * height];
+            HunterLinks = new byte[width * height];
             dynamicBlocked = new bool[width * height];
             blockedUntil = new float[width * height];
         }
@@ -60,6 +71,16 @@ namespace Override.HunterAI
             HunterWalkable[i] && !dynamicBlocked[i] && time >= blockedUntil[i];
 
         public bool IsDynamicallyBlocked(int i) => dynamicBlocked[i];
+
+        /// Neighbour k of cell i, or -1 if it's off the grid.
+        public int Neighbour(int i, int k)
+        {
+            int x = X(i) + DX[k], z = Z(i) + DZ[k];
+            return InBounds(x, z) ? Index(x, z) : -1;
+        }
+
+        public bool PlayerLinked(int i, int k) => (PlayerLinks[i] & (1 << k)) != 0;
+        public bool HunterLinked(int i, int k) => (HunterLinks[i] & (1 << k)) != 0;
 
         public void ClearDynamic() => System.Array.Clear(dynamicBlocked, 0, dynamicBlocked.Length);
 

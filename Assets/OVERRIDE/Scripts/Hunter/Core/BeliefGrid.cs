@@ -38,44 +38,28 @@ namespace Override.HunterAI
             Max = p;
         }
 
-        /// PREDICT. Each walkable cell keeps (1 − α) of its probability and shares α equally among its
-        /// walkable 8-neighbours. Mass-conserving: probability moves, it's never created or lost.
+        /// PREDICT. Each walkable cell keeps (1 − α) of its probability and shares α equally among the
+        /// neighbours it's linked to. Mass-conserving: probability moves, it's never created or lost.
         public void Predict(float alpha)
         {
             alpha = Mathf.Clamp01(alpha);
             System.Array.Clear(scratch, 0, scratch.Length);
-            int w = grid.Width, h = grid.Height;
 
-            for (int z = 0; z < h; z++)
-                for (int x = 0; x < w; x++)
-                {
-                    int i = grid.Index(x, z);
-                    float b = belief[i];
-                    if (b <= 0f) continue;
+            for (int i = 0; i < belief.Length; i++)
+            {
+                float b = belief[i];
+                if (b <= 0f) continue;
 
-                    int neighbours = 0;
-                    for (int dz = -1; dz <= 1; dz++)
-                        for (int dx = -1; dx <= 1; dx++)
-                        {
-                            if ((dx | dz) == 0) continue;
-                            int nx = x + dx, nz = z + dz;
-                            if (grid.InBounds(nx, nz) && grid.PlayerWalkable[grid.Index(nx, nz)]) neighbours++;
-                        }
+                // Only neighbours the player could actually walk to: probability doesn't leak through walls.
+                int neighbours = 0;
+                for (int k = 0; k < 8; k++) if (grid.PlayerLinked(i, k)) neighbours++;
+                if (neighbours == 0) { scratch[i] += b; continue; }
 
-                    if (neighbours == 0) { scratch[i] += b; continue; }
-
-                    scratch[i] += b * (1f - alpha);
-                    float share = b * alpha / neighbours;
-                    for (int dz = -1; dz <= 1; dz++)
-                        for (int dx = -1; dx <= 1; dx++)
-                        {
-                            if ((dx | dz) == 0) continue;
-                            int nx = x + dx, nz = z + dz;
-                            if (!grid.InBounds(nx, nz)) continue;
-                            int n = grid.Index(nx, nz);
-                            if (grid.PlayerWalkable[n]) scratch[n] += share;
-                        }
-                }
+                scratch[i] += b * (1f - alpha);
+                float share = b * alpha / neighbours;
+                for (int k = 0; k < 8; k++)
+                    if (grid.PlayerLinked(i, k)) scratch[grid.Neighbour(i, k)] += share;
+            }
 
             System.Array.Copy(scratch, belief, belief.Length);
         }

@@ -9,6 +9,9 @@
 //        1.0 m tall  -> the player could be here, crouching (vents are 1.2 m)
 //        2.0 m tall  -> the Seeker fits (a 0.8 m orb hovering 1.2 m up), so vents are excluded
 //      Walls are found the same way, so no zone or vent volumes have to be placed by hand.
+//   3. Between every pair of neighbouring cells, a sphere cast at each agent's travel height checks
+//      nothing static lies in between. Without it, a thin wall running between two cell centres
+//      (touching neither) would let A* plan straight through it.
 // Doors and crates (anything with a Rigidbody) are skipped here and handled as dynamic obstacles.
 
 using Override.HunterAI;
@@ -65,9 +68,47 @@ namespace Override.Hunter
                 if (grid.PlayerWalkable[i] && Clear(foot, o.HunterClearance, o.Radius)) { grid.HunterWalkable[i] = true; hunterCells++; }
             }
 
+            int playerLinks = BakeLinks(grid, grid.PlayerWalkable, grid.PlayerLinks, 0.5f, o.Radius * 0.75f);
+            int hunterLinks = BakeLinks(grid, grid.HunterWalkable, grid.HunterLinks, o.HunterClearance - 0.8f, o.Radius);
+
+            Debug.Log($"[Hunter] Links: {playerLinks} player, {hunterLinks} Seeker (walls between cells are respected).");
             Debug.Log($"[Hunter] Grid {w} x {h} cells of {o.CellSize} m: {playerCells} player-walkable, " +
                       $"{hunterCells} Seeker-walkable ({playerCells - hunterCells} crouch-only, e.g. vents).");
             return grid;
+        }
+
+        /// Sets bit k of links[i] when cell i can reach neighbour k: both walkable and a sphere of `radius`,
+        /// swept between the two centres at `height` above the floor, hits nothing static.
+        /// Each pair is tested once (k < 4) and mirrored (the opposite of k is 7 − k).
+        static int BakeLinks(HunterGrid grid, bool[] walkable, byte[] links, float height, float radius)
+        {
+            int count = 0;
+            for (int i = 0; i < grid.Count; i++)
+            {
+                if (!walkable[i]) continue;
+                for (int k = 4; k < 8; k++)   // the "forward" half: +x, and the three cells at +z
+                {
+                    int n = grid.Neighbour(i, k);
+                    if (n < 0 || !walkable[n]) continue;
+                    Vector3 a = grid.Centre(i) + Vector3.up * height;
+                    Vector3 b = grid.Centre(n) + Vector3.up * height;
+                    if (!SweepClear(a, b, radius)) continue;
+                    links[i] |= (byte)(1 << k);
+                    links[n] |= (byte)(1 << (7 - k));
+                    count += 2;
+                }
+            }
+            return count;
+        }
+
+        static bool SweepClear(Vector3 a, Vector3 b, float radius)
+        {
+            Vector3 d = b - a;
+            float length = d.magnitude;
+            int n = Physics.SphereCastNonAlloc(a, radius, d / length, rayHits, length, ~0, QueryTriggerInteraction.Ignore);
+            for (int k = 0; k < n; k++)
+                if (IsStatic(rayHits[k].collider)) return false;
+            return true;
         }
 
         static Collider[] FindFloors(Transform root)
