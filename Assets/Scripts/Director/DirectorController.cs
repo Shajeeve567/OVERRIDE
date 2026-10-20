@@ -356,7 +356,7 @@ namespace Override.Director
                 GUILayout.Label($"<b>{last.Algorithm}</b>: plan {last.Plan}", Rich());
                 GUILayout.Label($"Needed pressure {last.NeededPressure:0.00}, plan gives {c.PredictedPressure:0.00}");
                 GUILayout.Label($"Cost {c.Total:0.000} = band {c.Band:0.000} + budget {c.Budget:0} + blocked {c.Blocked:0} + close {c.TooClose:0.0}" +
-                                $" + flank {c.Flank:0.000} + drones {c.Drones:0.0} + doors {c.Change:0.0} + trap {c.TrapPlayer:0}");
+                                $" + flank {c.Flank:0.000} + drones {c.Drones:0.0} + locks {c.Locks:0.00} + door changes {c.Change:0.0} + trap {c.TrapPlayer:0}");
                 GUILayout.Label($"Evaluations {r.Evaluations}   Steps {r.Steps}   Worse moves accepted {r.WorseAccepted}   T0 {r.StartTemperature:0.000}");
             }
 
