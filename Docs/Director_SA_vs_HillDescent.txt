@@ -1,14 +1,15 @@
 Director search comparison (DirectorBrainTests, run outside Unity with Mono on 2026-10-20)
 
+Current cost function (door locks only add pressure on the player's own exits):
 Over 200 random situations (10 real bays, 0-3 doors):
   Algorithm            mean cost  found true best  evaluations  ms/decision
-  Simulated annealing      0.509       194/200         2031        0.675
-  Hill descent             0.515       182/200           56        0.024
-  Brute force              0.507       200/200         3457        3.001
-  SA strictly better in 17, HD strictly better in 5, tied in 178
-PASS Annealing_BeatsHillDescent_AgainstTheTrueOptimum (742 ms)
+  Simulated annealing      0.693       197/200         2031        0.704
+  Hill descent             0.698       189/200           52        0.023
+  Brute force              0.692       200/200         3457        3.103
+  SA strictly better in 11, HD strictly better in 3, tied in 186
 
-Tuning runs (same 200 situations, true-optimum hits out of 200):
+Tuning runs for the annealing schedule (earlier cost function, same 200 situations,
+true-optimum hits out of 200):
   SA 400 steps, cooling 0.98, accept 0.8  -> 151  (hill descent 182)
   SA 1000 steps, cooling 0.995, accept 0.5 -> 187
   SA 2000 steps, cooling 0.997, accept 0.5 -> 194  (chosen)
