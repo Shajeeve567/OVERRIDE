@@ -13,7 +13,8 @@ namespace Override.Motor
         private CharacterController controller;
         private Transform playerTransform;
         
-        private int currentPathIndex = 0; // Tracks where we are in the path
+        private int currentPathIndex = 0; 
+        private Vector3 lastPathFirstNode = Vector3.zero; // Tracks the FIRST node only
 
         private void Awake()
         {
@@ -41,10 +42,24 @@ namespace Override.Motor
 
             if (command.Path != null && command.Path.Length > 0)
             {
-                if (currentPathIndex >= command.Path.Length) currentPathIndex = 0;
+                // Reset index ONLY if the first node of the path has changed
+                if (lastPathFirstNode != command.Path[0])
+                {
+                    currentPathIndex = 0;
+                    lastPathFirstNode = command.Path[0];
+                }
+
+                // Clamp index to prevent out of bounds
+                if (currentPathIndex >= command.Path.Length) 
+                {
+                    currentPathIndex = command.Path.Length - 1;
+                }
 
                 Vector3 targetPoint = command.Path[currentPathIndex];
-                Vector3 direction = (targetPoint - transform.position).normalized;
+                
+                Vector3 direction = targetPoint - transform.position;
+                direction.y = 0; 
+                direction = direction.normalized;
                 
                 controller.Move(direction * moveSpeed * Time.deltaTime);
 
@@ -54,9 +69,15 @@ namespace Override.Motor
                     transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
                 }
 
-                if (Vector3.Distance(transform.position, targetPoint) < 1.0f)
+                float distanceToTarget = Vector3.Distance(new Vector3(transform.position.x, 0, transform.position.z), 
+                                                        new Vector3(targetPoint.x, 0, targetPoint.z));
+
+                if (distanceToTarget < 1.5f)
                 {
-                    currentPathIndex++;
+                    if (currentPathIndex < command.Path.Length - 1)
+                    {
+                        currentPathIndex++; 
+                    }
                 }
             }
         }
