@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 7938496698747524115}
   - component: {fileID: 8807734852054536431}
   - component: {fileID: 806423034269185411}
+  - component: {fileID: 5238406904527695993}
   m_Layer: 0
   m_Name: StandInDrone
   m_TagString: Untagged
@@ -160,3 +161,20 @@ MonoBehaviour:
   shotInterval: 1
   hitPoints: 3
   lifetime: 40
+--- !u!114 &5238406904527695993
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8983876747791295847}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 64ba56e36be51458e97fe5338a56ee9b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Override.Combat.Health
+  maxHealth: 60
+  isPlayer: 0
+  dropOnDeath: {fileID: 0}
+  disableOnDeath: 1
+  destroyOnDeath: 1
