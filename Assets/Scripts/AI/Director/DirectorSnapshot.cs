@@ -28,7 +28,9 @@ namespace Override.DirectorAI
     {
         public int Id;
         public Vector3 Position;
-        public bool PlayerZoneExit;   // one of the ways out of the zone the player is in right now
+        /// One of the ways in or out of the zone the player is in right now. Only these doors add
+        /// pressure when locked, and they can never all be locked at once.
+        public bool PlayerZoneExit;
     }
 
     public sealed class DirectorSnapshot

@@ -10,6 +10,14 @@
 //         - Flank   * directionSpread                            <- soft reward (interesting fights)
 //         + Change  * doorsToggledSinceLastPlan                  <- soft rule (stability)
 //         + PerDrone * drones                                     <- economy: no wasted drones
+//         + PerLock  * lockedDoors                                <- economy: no pointless locks
+//
+// DOORS ONLY MATTER NEAR THE PLAYER: a locked door adds pressure only if it's an exit of the zone the
+// player is in (it cuts their options right now). A locked door on the far side of the facility does
+// nothing for tension, so it adds no pressure, but it still costs PerLock. Two effects:
+//   - the search never locks irrelevant doors (they'd only add cost);
+//   - a door locked earlier, while it WAS an exit, gets unlocked once the player has moved on,
+//     because keeping it locked costs PerLock (0.15) and unlocking costs only Change (0.1).
 //
 // WHY HARD RULES ARE PENALTIES, NOT FILTERS: local search moves one small step at a time. If illegal
 // plans were removed from the space, legal plans could form islands with no single-step path between
@@ -38,19 +46,22 @@ namespace Override.DirectorAI
         public float Change = 0.1f;
         /// A small price per drone: ARGUS shouldn't spend a drone that adds almost nothing.
         public float PerDrone = 0.1f;
+        /// A small price per locked door, so a lock that adds no pressure is never worth keeping.
+        /// Kept above Change, so unlocking a pointless lock is always cheaper than leaving it.
+        public float PerLock = 0.15f;
 
         /// Closer than this (metres) counts as "spawning in the player's face".
         public float CloseDistance = 10f;
         /// How quickly a drone's pressure fades with distance: at CloseDistance + ArrivalScale it's worth half.
         public float ArrivalScale = 20f;
-        /// Pressure added by each locked door (it cuts the player's options).
+        /// Pressure added by each locked door that is an exit of the player's zone (it cuts their options).
         public float LockPressure = 0.3f;
     }
 
     /// The cost split into its terms, for the debug panel and for explaining decisions in the viva.
     public struct CostBreakdown
     {
-        public float Total, Band, Budget, Blocked, IllegalLock, TrapPlayer, TooClose, Flank, Change, Drones;
+        public float Total, Band, Budget, Blocked, IllegalLock, TrapPlayer, TooClose, Flank, Change, Drones, Locks;
         public float PredictedPressure, NeededPressure;
     }
 
@@ -123,7 +134,10 @@ namespace Override.DirectorAI
                 locks++;
                 if (s.Doors[i].PlayerZoneExit) exitsLocked++;
             }
-            pressure += locks * w.LockPressure;
+            // Only locks on the player's own exits add pressure (see the note at the top).
+            float lockPressure = exitsLocked * w.LockPressure;
+            float dronePressure = pressure;
+            pressure += lockPressure;
             c.PredictedPressure = pressure;
 
             float gap = pressure - NeededPressure;
@@ -140,7 +154,7 @@ namespace Override.DirectorAI
             // one side -> the average is a full-length arrow (length 1) -> spread 0. From opposite sides
             // -> they cancel -> spread 1.
             // Rewarded (negative cost) because a pincer is the Wisps' whole personality in the GDD.
-            float spread = drones >= 2 && pressure > 0f ? 1f - directionSum.magnitude / (pressure - locks * w.LockPressure) : 0f;
+            float spread = drones >= 2 && dronePressure > 0f ? 1f - directionSum.magnitude / dronePressure : 0f;
             c.Flank = -w.Flank * spread;
 
             // Doors are STATES (they stay locked), so flipping them every few seconds would feel random.
@@ -148,8 +162,9 @@ namespace Override.DirectorAI
             c.Change = w.Change * plan.LockChanges(previous);
 
             c.Drones = w.PerDrone * drones;
+            c.Locks = w.PerLock * locks;
 
-            c.Total = c.Band + c.Budget + c.Blocked + c.IllegalLock + c.TrapPlayer + c.TooClose + c.Flank + c.Change + c.Drones;
+            c.Total = c.Band + c.Budget + c.Blocked + c.IllegalLock + c.TrapPlayer + c.TooClose + c.Flank + c.Change + c.Drones + c.Locks;
             return c;
         }
     }
