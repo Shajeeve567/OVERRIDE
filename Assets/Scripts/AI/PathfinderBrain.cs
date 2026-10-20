@@ -18,7 +18,7 @@ namespace Override.AI
             if (Time.time - lastPathTime > pathRefreshRate)
             {
                 lastPathTime = Time.time;
-                currentPath = FindPath(transform.position, snapshot.PlayerPosition);
+                currentPath = FindPath(transform.position, snapshot.PlayerPosition, snapshot.PlayerForward);
             }
 
             // Send the path to the Motor
@@ -39,7 +39,7 @@ namespace Override.AI
         }
 
         // --- THE A* ALGORITHM ---
-        private List<Vector3> FindPath(Vector3 startPos, Vector3 targetPos)
+        private List<Vector3> FindPath(Vector3 startPos, Vector3 targetPos, Vector3 playerForward)
         {
             if (WaypointGraph.Instance == null) return null;
 
@@ -93,8 +93,12 @@ namespace Override.AI
                     {
                         if (closedSet.Contains(neighbor)) continue;
 
-                        // Note: Later, I need to add Exposure here!
-                        float tentativeGScore = gScore[current] + Vector3.Distance(current.position, neighbor.position);
+                        // Distance + (Exposure * Weight)
+                        float distanceCost = Vector3.Distance(current.position, neighbor.position);
+                        float exposureCost = CalculateExposure(neighbor.position, targetPos, playerForward);
+                        float exposureWeight = 3.0f;
+
+                        float tentativeGScore = gScore[current] + distanceCost + (exposureCost * exposureWeight);
 
                         if (tentativeGScore < gScore[neighbor])
                         {
@@ -140,6 +144,19 @@ namespace Override.AI
                 }
             }
             return closest;
+        }
+
+        private float CalculateExposure(Vector3 nodePos, Vector3 playerPos, Vector3 playerForward)
+        {
+            Vector3 dirToNode = (nodePos - playerPos).normalized;
+            
+            // Dot product: 1 if player is looking directly at the node, -1 if looking away
+            float dot = Vector3.Dot(playerForward, dirToNode);
+            
+            // Convert to 0 (safe) to 1 (exposed)
+            float exposure = Mathf.Clamp01((dot + 1f) / 2f); 
+            
+            return exposure;
         }
     }
 }
