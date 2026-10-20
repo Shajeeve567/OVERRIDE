@@ -116,3 +116,6 @@ InitTestScene*.unity*
 
 # Local assignment briefs and planning context (not part of the Unity project)
 /Ilzam's Agent Context/
+
+# Files moved out of Assets for review before deleting
+/_to_delete/
