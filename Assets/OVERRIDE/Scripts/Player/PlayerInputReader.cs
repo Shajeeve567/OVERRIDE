@@ -6,6 +6,7 @@
 //   differ from Unity's template. Building our own actions here means no merge conflicts on a
 //   shared file, and every binding is readable in one place.
 
+using Override.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -63,6 +64,12 @@ namespace Override.Player
         }
 
         void OnEnable() => SetAll(true);
+
+        // F1 is the team-wide debug overlay (heatmap, paths, scores), whatever else the player is doing.
+        void Update()
+        {
+            if (DebugOverlayPressed) DebugOverlay.Toggle();
+        }
         void OnDisable() => SetAll(false);
 
         void OnDestroy()
