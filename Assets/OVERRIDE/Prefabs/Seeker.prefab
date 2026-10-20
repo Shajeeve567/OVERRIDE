@@ -77,7 +77,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Override.Combat.Health
   maxHealth: 150
   isPlayer: 0
-  dropOnDeath: {fileID: 0}
+  godMode: 0
+  dropOnDeath: {fileID: 2802224437076178189, guid: 83820ed91e5bf4cc5a3d6e0b208cff66, type: 3}
   disableOnDeath: 1
   destroyOnDeath: 0
 --- !u!114 &3905789525406065112
