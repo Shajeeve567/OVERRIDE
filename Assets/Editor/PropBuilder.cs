@@ -37,18 +37,33 @@ namespace Override.EditorTools
         // ------------------------------------------------------------------
         // LAYOUT (copied from GreyboxBuilder)
         // ------------------------------------------------------------------
+        // Positions in this file are written in the same DESIGN UNITS as GreyboxBuilder's layout and
+        // turned into metres with S(...) or P(...), which multiply by LevelSize.Plan. Prop SIZES are not
+        // scaled: a bench stays a bench. So in a bigger level the props simply spread out.
         const float WallHalf      = 0.15f; // half the greybox wall thickness; walls sit centred on room edges
-        const float RoomHeight    = 3.5f;
-        const float AirlockHeight = 3.0f;
-        const float CoreHeight    = 6.0f;
-        const float CoreRadius    = 8f;
-        const float PillarRadius  = 1.5f;
-        static readonly Vector3 CoreCentre = new Vector3(30f, 0f, 50f);
+        const float RoomHeight    = LevelSize.RoomHeight;
+        const float AirlockHeight = LevelSize.AirlockHeight;
+        const float CoreHeight    = LevelSize.CoreHeight;
+        static readonly float CoreRadius   = S(8f);
+        static readonly float PillarRadius = S(1.5f);
+        static readonly Vector3 CoreCentre = P(30f, 50f);
 
-        static readonly Area Airlock     = new Area(26f,  0f, 34f,  6f);
-        static readonly Area Labs        = new Area( 0f,  8f, 60f, 20f);
-        static readonly Area ServerHall  = new Area( 0f, 24f, 28f, 38f);
-        static readonly Area Maintenance = new Area(32f, 24f, 60f, 38f);
+        // Mounting heights, raised with the taller rooms so cameras and pipes sit up near the ceiling.
+        const float CameraHeight = RoomHeight - 1.5f;
+        const float PipeHeight   = RoomHeight - 1.5f;
+        const float RackHeight   = 3.0f; // server racks (was 2.2)
+
+        static readonly Area Airlock     = Scaled(26f,  0f, 34f,  6f);
+        static readonly Area Labs        = Scaled( 0f,  8f, 60f, 20f);
+        static readonly Area ServerHall  = Scaled( 0f, 24f, 28f, 38f);
+        static readonly Area Maintenance = Scaled(32f, 24f, 60f, 38f);
+
+        // Design units -> metres.
+        static float S(float designUnits) => LevelSize.S(designUnits);
+        // A floor point (y = 0) from design units.
+        static Vector3 P(float x, float z) => new Vector3(S(x), 0f, S(z));
+        static Area Scaled(float xMin, float zMin, float xMax, float zMax) =>
+            new Area(S(xMin), S(zMin), S(xMax), S(zMax));
 
         // Static flags: this geometry never moves, so it can be lightmapped, occlusion-culled and batched.
         // (Pushable barricades are the exception: they have a Rigidbody, so they must NOT be static.)
@@ -136,45 +151,46 @@ namespace Override.EditorTools
         // Start room: lockers and a bench sell "staff entrance". No combat here, so no cover.
         static void DressAirlock(Transform zone)
         {
-            foreach (float z in new[] { 1.0f, 1.7f, 2.4f })
-                PlaceOnWall("Locker", zone, Airlock, Wall.East, z, 0f);
-            PlaceOnWall("Bench", zone, Airlock, Wall.West, 3f, 0f);
-            CeilingLight(zone, new Vector3(30f, AirlockHeight, 3f), 0f, "Light_Airlock");
+            // Lockers stand side by side 0.7 m apart, so only their starting point is scaled.
+            for (int i = 0; i < 3; i++)
+                PlaceOnWall("Locker", zone, Airlock, Wall.East, S(1.0f) + i * 0.7f, 0f);
+            PlaceOnWall("Bench", zone, Airlock, Wall.West, S(3f), 0f);
+            CeilingLight(zone, P(30f, 3f) + Vector3.up * AirlockHeight, 0f, "Light_Airlock");
         }
 
         // Open benches with long sightlines (GDD: "open benches and glass walls").
         static void DressLabs(Transform zone)
         {
-            // Six 4 m benches from the Labs mockup. The middle strip (x 23-31) stays clear so the
-            // airlock door has a straight view into the room.
+            // Six 4 m benches from the Labs mockup. The middle strip stays clear so the airlock door
+            // has a straight view into the room.
             var benches = new (float x, float z, float yaw)[]
             {
                 (8.4f, 16.3f, 0f), (8.4f, 11.7f, 180f), (20.7f, 14.0f, 0f),
                 (33.8f, 16.6f, 0f), (33.8f, 11.4f, 180f), (43.0f, 14.0f, 180f),
             };
-            foreach (var b in benches) Place("LabBench", zone, new Vector3(b.x, 0f, b.z), b.yaw);
+            foreach (var b in benches) Place("LabBench", zone, P(b.x, b.z), b.yaw);
 
-            // Pushable barricade at the Maintenance corridor mouth (x 45-49), leaving 1.9 m to squeeze by.
-            Place("CrateBarricade", zone, new Vector3(47.5f, 0f, 18.3f), 15f);
+            // Pushable barricade at the Maintenance corridor mouth.
+            Place("CrateBarricade", zone, P(47.5f, 18.3f), 15f);
 
             // Terminal T1, facing west so the player approaches it across the room.
-            Place("Terminal_Placeholder", zone, new Vector3(55.6f, 0f, 14.2f), -90f, "Terminal_T1 (placeholder)");
+            Place("Terminal_Placeholder", zone, P(55.6f, 14.2f), -90f, "Terminal_T1 (placeholder)");
 
-            SecurityCamera(zone, Labs, Wall.North, 1.0f, 3.0f);
-            SecurityCamera(zone, Labs, Wall.North, 59.0f, 3.0f);
-            PlaceOnWall("HealthStation", zone, Labs, Wall.South, 15.8f, 0f);
-            PlaceOnWall("HealthStation", zone, Labs, Wall.North, 27.0f, 0f); // between the two vents
+            SecurityCamera(zone, Labs, Wall.North, S(1.0f), CameraHeight);
+            SecurityCamera(zone, Labs, Wall.North, S(59.0f), CameraHeight);
+            PlaceOnWall("HealthStation", zone, Labs, Wall.South, S(15.8f), 0f);
+            PlaceOnWall("HealthStation", zone, Labs, Wall.North, S(27.0f), 0f); // between the two vents
 
             foreach (float z in new[] { 11f, 17f })
                 for (float x = 5f; x < 60f; x += 10f)
-                    CeilingLight(zone, new Vector3(x, RoomHeight, z), 0f, "Light_Labs");
+                    CeilingLight(zone, P(x, z) + Vector3.up * RoomHeight, 0f, "Light_Labs");
         }
 
         // Rows of racks make lanes for the Wardens' cover fights.
         static void DressServerHall(Transform zone)
         {
-            // Six rows from the Server Hall mockup: (start x, end x, z). Racks are 0.6 m wide.
-            // The aisles between rows are about 2.8 m, wide enough for a Warden and the player.
+            // Six rows from the Server Hall mockup: (start x, end x, z) in design units. The rows get
+            // LONGER with the plan, so more 0.6 m racks fit in each; the aisles between rows get wider.
             var rows = new (float x0, float x1, float z)[]
             {
                 (2.3f, 11.9f, 35.0f), (14.2f, 24.2f, 35.0f),
@@ -183,29 +199,30 @@ namespace Override.EditorTools
             };
             foreach (var r in rows)
             {
-                int count = Mathf.FloorToInt((r.x1 - r.x0) / 0.62f); // 2 cm gap between racks
+                float start = S(r.x0), end = S(r.x1);
+                int count = Mathf.FloorToInt((end - start) / 0.62f); // 2 cm gap between racks
                 for (int i = 0; i < count; i++)
-                    Place("ServerRack", zone, new Vector3(r.x0 + 0.31f + i * 0.62f, 0f, r.z), 0f);
+                    Place("ServerRack", zone, new Vector3(start + 0.31f + i * 0.62f, 0f, S(r.z)), 0f);
             }
 
-            // Barricade beside door A (x 24-27.5) into the Core, leaving 2.3 m of the doorway open.
-            Place("CrateBarricade", zone, new Vector3(26.9f, 0f, 36.4f), -10f);
+            // Barricade beside door A into the Core, leaving most of the doorway open.
+            Place("CrateBarricade", zone, P(26.9f, 36.4f), -10f);
 
-            // Terminal T3 against the east wall, south of the Maintenance doorway (z 31-33.5).
-            Place("Terminal_Placeholder", zone, new Vector3(27.0f, 0f, 28.5f), -90f, "Terminal_T3 (placeholder)");
+            // Terminal T3 near the east wall, south of the Maintenance doorway.
+            Place("Terminal_Placeholder", zone, P(27.0f, 28.5f), -90f, "Terminal_T3 (placeholder)");
 
-            SecurityCamera(zone, ServerHall, Wall.North, 1.0f, 3.0f);
-            SecurityCamera(zone, ServerHall, Wall.East, 25.0f, 3.0f);
-            PlaceOnWall("HealthStation", zone, ServerHall, Wall.West, 33.2f, 0f);
-            PlaceOnWall("HealthStation", zone, ServerHall, Wall.East, 35.5f, 0f);
+            SecurityCamera(zone, ServerHall, Wall.North, S(1.0f), CameraHeight);
+            SecurityCamera(zone, ServerHall, Wall.East, S(25.0f), CameraHeight);
+            PlaceOnWall("HealthStation", zone, ServerHall, Wall.West, S(33.2f), 0f);
+            PlaceOnWall("HealthStation", zone, ServerHall, Wall.East, S(35.5f), 0f);
 
             // Lights over the aisles, not over the racks.
             foreach (float z in new[] { 33.1f, 29.25f })
                 for (float x = 4f; x < 28f; x += 6f)
-                    CeilingLight(zone, new Vector3(x, RoomHeight, z), 0f, "Light_ServerHall");
+                    CeilingLight(zone, P(x, z) + Vector3.up * RoomHeight, 0f, "Light_ServerHall");
             foreach (float z in new[] { 36.6f, 25.6f })
                 foreach (float x in new[] { 7f, 19f })
-                    CeilingLight(zone, new Vector3(x, RoomHeight, z), 0f, "Light_ServerHall");
+                    CeilingLight(zone, P(x, z) + Vector3.up * RoomHeight, 0f, "Light_ServerHall");
         }
 
         // Pipes, crates and dim light: the Seeker's territory.
@@ -217,46 +234,44 @@ namespace Override.EditorTools
                 (35.0f, 35.2f, 8f), (41.5f, 34.5f, -5f), (42.3f, 27.3f, 12f),
                 (47.3f, 33.8f, 0f), (54.2f, 29.6f, -8f), (55.8f, 26.2f, 20f),
             };
-            foreach (var c in crates) Place("CoverCrate", zone, new Vector3(c.x, 0f, c.z), c.yaw);
+            foreach (var c in crates) Place("CoverCrate", zone, P(c.x, c.z), c.yaw);
 
-            // Barricade beside the dark tunnel mouth (x 33-35) to the Core.
-            Place("CrateBarricade", zone, new Vector3(36.6f, 0f, 36.8f), 5f);
+            // Barricade beside the dark tunnel mouth to the Core.
+            Place("CrateBarricade", zone, P(36.6f, 36.8f), 5f);
 
-            Place("Terminal_Placeholder", zone, new Vector3(58.6f, 0f, 31.4f), -90f, "Terminal_T2 (placeholder)");
+            Place("Terminal_Placeholder", zone, P(58.6f, 31.4f), -90f, "Terminal_T2 (placeholder)");
 
-            // Pipe runs high on the walls (2.75 m), split around the interior walls at x 38.5/44.5/51.5
-            // and the tunnel opening (x 33-35).
-            const float pipeY = 2.75f;
-            PipeRun(zone, Maintenance, Wall.North, 35.4f, 38.2f, pipeY);
-            PipeRun(zone, Maintenance, Wall.North, 38.8f, 44.2f, pipeY);
-            PipeRun(zone, Maintenance, Wall.North, 44.8f, 51.2f, pipeY);
-            PipeRun(zone, Maintenance, Wall.North, 51.8f, 59.6f, pipeY);
-            PipeRun(zone, Maintenance, Wall.South, 38.8f, 44.2f, pipeY);
-            PipeRun(zone, Maintenance, Wall.South, 51.8f, 59.6f, pipeY);
-            PipeRun(zone, Maintenance, Wall.East,  24.4f, 37.6f, pipeY);
+            // Pipe runs high on the walls, split around the interior walls and the tunnel opening.
+            PipeRun(zone, Maintenance, Wall.North, S(35.4f), S(38.2f), PipeHeight);
+            PipeRun(zone, Maintenance, Wall.North, S(38.8f), S(44.2f), PipeHeight);
+            PipeRun(zone, Maintenance, Wall.North, S(44.8f), S(51.2f), PipeHeight);
+            PipeRun(zone, Maintenance, Wall.North, S(51.8f), S(59.6f), PipeHeight);
+            PipeRun(zone, Maintenance, Wall.South, S(38.8f), S(44.2f), PipeHeight);
+            PipeRun(zone, Maintenance, Wall.South, S(51.8f), S(59.6f), PipeHeight);
+            PipeRun(zone, Maintenance, Wall.East,  S(24.4f), S(37.6f), PipeHeight);
 
-            SecurityCamera(zone, Maintenance, Wall.West, 37.0f, 3.0f);
-            SecurityCamera(zone, Maintenance, Wall.South, 59.2f, 3.0f);
-            PlaceOnWall("HealthStation", zone, Maintenance, Wall.West, 26.0f, 0f);
-            PlaceOnWall("HealthStation", zone, Maintenance, Wall.East, 35.7f, 0f);
+            SecurityCamera(zone, Maintenance, Wall.West, S(37.0f), CameraHeight);
+            SecurityCamera(zone, Maintenance, Wall.South, S(59.2f), CameraHeight);
+            PlaceOnWall("HealthStation", zone, Maintenance, Wall.West, S(26.0f), 0f);
+            PlaceOnWall("HealthStation", zone, Maintenance, Wall.East, S(35.7f), 0f);
 
             // Fewer lights than other zones, so the room reads as dim.
             foreach (float x in new[] { 35f, 41.5f, 48f, 55.5f })
-                CeilingLight(zone, new Vector3(x, RoomHeight, 31f), 90f, "Light_Maintenance");
-            CeilingLight(zone, new Vector3(48f, RoomHeight, 26f), 90f, "Light_Maintenance");
-            CeilingLight(zone, new Vector3(48f, RoomHeight, 36f), 90f, "Light_Maintenance");
+                CeilingLight(zone, P(x, 31f) + Vector3.up * RoomHeight, 90f, "Light_Maintenance");
+            CeilingLight(zone, P(48f, 26f) + Vector3.up * RoomHeight, 90f, "Light_Maintenance");
+            CeilingLight(zone, P(48f, 36f) + Vector3.up * RoomHeight, 90f, "Light_Maintenance");
         }
 
         // Round final room: a ring of cover around the pillar, the override console, ARGUS red everywhere.
         static void DressCore(Transform zone)
         {
-            // Six cover blocks 6 m from the centre, at 30°, 90°, 150°... The 270° one sits between the
+            // Six cover blocks at 3/4 of the radius, at 30°, 90°, 150°... The 270° one sits between the
             // two entrances, so neither doorway is blocked.
             for (int i = 0; i < 6; i++)
             {
                 float a = (30f + 60f * i) * Mathf.Deg2Rad;
                 var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                var cover = Place("CoverBlock", zone, CoreCentre + outward * 6f, 0f);
+                var cover = Place("CoverBlock", zone, CoreCentre + outward * S(6f), 0f);
                 cover.transform.rotation = Quaternion.LookRotation(-outward); // long side along the circle
             }
 
@@ -276,40 +291,43 @@ namespace Override.EditorTools
 
             // Two cameras on the north side of the ring wall, health stations east and west.
             foreach (float deg in new[] { 78f, 102f })
-                CoreWallMount(zone, "SecurityCamera", deg, 4.5f, true);
+                CoreWallMount(zone, "SecurityCamera", deg, CoreHeight - 2.5f, true);
             foreach (float deg in new[] { 0f, 180f })
                 CoreWallMount(zone, "HealthStation", deg, 0f, false);
 
-            // Eight lights in a circle, 5 m out, each turned along the circle.
+            // Eight lights in a circle, each turned along the circle.
             for (int i = 0; i < 8; i++)
             {
                 float a = i * 45f * Mathf.Deg2Rad;
                 var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                var light = CeilingLight(zone, CoreCentre + outward * 5f + Vector3.up * CoreHeight, 0f, "Light_Core");
+                var light = CeilingLight(zone, CoreCentre + outward * S(5f) + Vector3.up * CoreHeight, 0f, "Light_Core");
                 light.transform.rotation = Quaternion.LookRotation(outward);
             }
         }
 
         // Frames around every doorway make exits readable at a glance: teal for doors, hazard yellow
         // for crouch-only vents and the dark tunnel. Sizes vary per doorway, so these are built
-        // directly instead of as prefabs.
+        // directly instead of as prefabs. Positions are design units; heights come from LevelSize,
+        // so they always match the doorway heights GreyboxBuilder cut.
         static void BuildDoorFrames(Transform group)
         {
-            //        name                          alongX  wall z/x  from   to     height  strip
-            DoorFrame(group, "Airlock_North",        true,   6f,     29f,   31f,   2.5f, "Prop_TealGlow");
-            DoorFrame(group, "Labs_South",           true,   8f,     29f,   31f,   2.5f, "Prop_TealGlow");
-            DoorFrame(group, "Labs_To_ServerHall",   true,  20f,     11f,   15f,   3.0f, "Prop_TealGlow");
-            DoorFrame(group, "Labs_To_Maintenance",  true,  20f,     45f,   49f,   3.0f, "Prop_TealGlow");
-            DoorFrame(group, "ServerHall_South",     true,  24f,     11f,   15f,   3.0f, "Prop_TealGlow");
-            DoorFrame(group, "Maintenance_South",    true,  24f,     45f,   49f,   3.0f, "Prop_TealGlow");
-            DoorFrame(group, "ServerHall_East",      false, 28f,     31f,   33.5f, 3.0f, "Prop_TealGlow");
-            DoorFrame(group, "Maintenance_West",     false, 32f,     31f,   33.5f, 3.0f, "Prop_TealGlow");
-            DoorFrame(group, "ServerHall_To_Core",   true,  38f,     24f,   27.5f, 3.0f, "Prop_TealGlow");
-            DoorFrame(group, "Tunnel_To_Core",       true,  38f,     33f,   35f,   2.2f, "Prop_Hazard");
-            DoorFrame(group, "Vent_Labs_SH_North",   true,  20f,     21.5f, 23f,   1.2f, "Prop_Hazard");
-            DoorFrame(group, "Vent_Labs_SH_South",   true,  24f,     21.5f, 23f,   1.2f, "Prop_Hazard");
-            DoorFrame(group, "Vent_Labs_Maint_North",true,  20f,     36.5f, 38f,   1.2f, "Prop_Hazard");
-            DoorFrame(group, "Vent_Labs_Maint_South",true,  24f,     36.5f, 38f,   1.2f, "Prop_Hazard");
+            const float door = LevelSize.CorridorHeight, airlock = LevelSize.AirlockDoorHeight,
+                        tunnel = LevelSize.TunnelHeight, vent = LevelSize.VentHeight;
+            //        name                          alongX  wall z/x  from   to     height   strip
+            DoorFrame(group, "Airlock_North",        true,   6f,     29f,   31f,   airlock, "Prop_TealGlow");
+            DoorFrame(group, "Labs_South",           true,   8f,     29f,   31f,   airlock, "Prop_TealGlow");
+            DoorFrame(group, "Labs_To_ServerHall",   true,  20f,     11f,   15f,   door,    "Prop_TealGlow");
+            DoorFrame(group, "Labs_To_Maintenance",  true,  20f,     45f,   49f,   door,    "Prop_TealGlow");
+            DoorFrame(group, "ServerHall_South",     true,  24f,     11f,   15f,   door,    "Prop_TealGlow");
+            DoorFrame(group, "Maintenance_South",    true,  24f,     45f,   49f,   door,    "Prop_TealGlow");
+            DoorFrame(group, "ServerHall_East",      false, 28f,     31f,   33.5f, door,    "Prop_TealGlow");
+            DoorFrame(group, "Maintenance_West",     false, 32f,     31f,   33.5f, door,    "Prop_TealGlow");
+            DoorFrame(group, "ServerHall_To_Core",   true,  38f,     24f,   27.5f, door,    "Prop_TealGlow");
+            DoorFrame(group, "Tunnel_To_Core",       true,  38f,     33f,   35f,   tunnel,  "Prop_Hazard");
+            DoorFrame(group, "Vent_Labs_SH_North",   true,  20f,     21.5f, 23f,   vent,    "Prop_Hazard");
+            DoorFrame(group, "Vent_Labs_SH_South",   true,  24f,     21.5f, 23f,   vent,    "Prop_Hazard");
+            DoorFrame(group, "Vent_Labs_Maint_North",true,  20f,     36.5f, 38f,   vent,    "Prop_Hazard");
+            DoorFrame(group, "Vent_Labs_Maint_South",true,  24f,     36.5f, 38f,   vent,    "Prop_Hazard");
         }
 
         // ==================================================================
@@ -403,6 +421,9 @@ namespace Override.EditorTools
             var frame = Group(parent, name);
             const float post = 0.25f, depth = 0.6f, header = 0.2f;
 
+            // The doorway's position comes in design units; the frame's own sizes above stay in metres.
+            wallCoord = S(wallCoord); from = S(from); to = S(to);
+
             Piece("Post_A", from - post, from, 0f, height + header, "Prop_Metal", depth, true);
             Piece("Post_B", to, to + post, 0f, height + header, "Prop_Metal", depth, true);
             Piece("Header", from - post, to + post, height, height + header, "Prop_Metal", depth, true);
@@ -432,7 +453,8 @@ namespace Override.EditorTools
         {
             prefabs.Clear();
             Make("LabBench",             BuildLabBench,      collider: true,  isStatic: true);
-            Make("ServerRack",           BuildServerRack,    collider: true,  isStatic: true);
+            // rebuild: true = always regenerate, so a size change here (RackHeight) reaches the asset.
+            Make("ServerRack",           BuildServerRack,    collider: true,  isStatic: true, rebuild: true);
             Make("CoverCrate",           BuildCoverCrate,    collider: true,  isStatic: true);
             Make("CrateBarricade",       BuildBarricade,     collider: true,  isStatic: false);
             Make("CoverBlock",           BuildCoverBlock,    collider: true,  isStatic: true);
@@ -445,11 +467,14 @@ namespace Override.EditorTools
             Make("LightFixture",         BuildLightFixture,  collider: false, isStatic: true);
         }
 
-        static void Make(string name, Func<GameObject> build, bool collider, bool isStatic)
+        static void Make(string name, Func<GameObject> build, bool collider, bool isStatic, bool rebuild = false)
         {
             string path = PrefabFolder + "/" + name + ".prefab";
             var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-            if (existing != null) { prefabs[name] = existing; return; } // keep whatever is there (maybe a real model)
+            // Normally keep whatever is there (it may have been swapped for a real model).
+            // With rebuild, saving over the same path keeps the prefab's GUID, so every copy already
+            // placed in a scene updates to the new shape instead of going missing.
+            if (existing != null && !rebuild) { prefabs[name] = existing; return; }
 
             var temp = build();
             temp.name = name;
@@ -489,12 +514,15 @@ namespace Override.EditorTools
         static GameObject BuildServerRack()
         {
             var root = new GameObject();
-            Part(root, "Body", PrimitiveType.Cube, new Vector3(0f, 1.1f, 0f), new Vector3(0.6f, 2.2f, 1.0f), "Prop_DarkMetal");
+            // 3.0 m tall (was 2.2): taller than a person, so the lanes really hide you and the Warden,
+            // but still well under the 10 m ceiling so drones can fly over the rows.
+            Part(root, "Body", PrimitiveType.Cube, new Vector3(0f, RackHeight / 2f, 0f), new Vector3(0.6f, RackHeight, 1.0f), "Prop_DarkMetal");
             foreach (float side in new[] { 0.505f, -0.505f }) // LED rows on both faces of the rack
             {
-                for (int i = 0; i < 6; i++)
-                    Part(root, "LED", PrimitiveType.Cube, new Vector3(0f, 0.4f + i * 0.3f, side), new Vector3(0.4f, 0.03f, 0.01f), "Prop_TealGlow");
-                Part(root, "StatusLight", PrimitiveType.Cube, new Vector3(0.22f, 2.0f, side), new Vector3(0.05f, 0.05f, 0.01f), "Prop_RedGlow");
+                // One LED strip every 0.3 m, from 0.4 m up to just under the top.
+                for (float y = 0.4f; y < RackHeight - 0.35f; y += 0.3f)
+                    Part(root, "LED", PrimitiveType.Cube, new Vector3(0f, y, side), new Vector3(0.4f, 0.03f, 0.01f), "Prop_TealGlow");
+                Part(root, "StatusLight", PrimitiveType.Cube, new Vector3(0.22f, RackHeight - 0.2f, side), new Vector3(0.05f, 0.05f, 0.01f), "Prop_RedGlow");
             }
             return root;
         }
