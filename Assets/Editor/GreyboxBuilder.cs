@@ -7,6 +7,8 @@
 //   room is too big, you change one number and rebuild, instead of dragging dozens of cubes.
 //   It also lives in an "Editor" folder, so Unity never includes it in the built game.
 //
+// SIZE: the floor plan is multiplied by LevelSize.Plan and the heights come from LevelSize.cs.
+//
 // COORDINATES: 1 Unity unit = 1 metre. X points east, Z points north, Y points up.
 //   The origin (0,0,0) is the south-west corner of the Labs' row. The airlock is at the bottom
 //   (south) and the Core at the top (north), exactly like the overview mockup.
@@ -25,26 +27,32 @@ namespace Override.EditorTools
         // ------------------------------------------------------------------
         const string RootFolder = "Assets/OVERRIDE/Greybox";
         const string MatFolder  = RootFolder + "/Materials";
-        const string ScenePath  = RootFolder + "/Greybox_v1.unity";
+        // v2 = the expanded level. A NEW scene, so Greybox_v1 and everything you added to it stay untouched.
+        const string ScenePath  = RootFolder + "/Greybox_v2.unity";
 
         // ------------------------------------------------------------------
         // SIZES (metres). These are starting values: tune them by walking the level.
+        // Floor-plan size and heights now come from LevelSize.cs, shared with the other builders.
         // ------------------------------------------------------------------
         const float WallThickness  = 0.3f;
         const float FloorThickness = 0.2f;
 
-        const float RoomHeight        = 3.5f; // Labs, Server Hall, Maintenance
-        const float AirlockHeight     = 3.0f;
-        const float CoreHeight        = 6.0f; // taller, so the final room feels different
-        const float CorridorHeight    = 3.0f;
-        const float AirlockDoorHeight = 2.5f;
-        const float TunnelHeight      = 2.2f; // dark maintenance tunnel: walkable but cramped
-        const float VentHeight        = 1.2f; // crouch-only: set this just above your crouch height
+        const float RoomHeight        = LevelSize.RoomHeight;
+        const float AirlockHeight     = LevelSize.AirlockHeight;
+        const float CoreHeight        = LevelSize.CoreHeight;
+        const float CorridorHeight    = LevelSize.CorridorHeight;
+        const float AirlockDoorHeight = LevelSize.AirlockDoorHeight;
+        const float TunnelHeight      = LevelSize.TunnelHeight;
+        const float VentHeight        = LevelSize.VentHeight;
 
-        static readonly Vector2 CoreCentre = new Vector2(30f, 50f); // (x, z)
-        const float CoreRadius   = 8f;   // 16 m across
-        const float PillarRadius = 1.5f;
-        const int   CoreWallSegments = 96; // a circle made of straight wall pieces; more = smoother
+        // The Core is scaled with the plan. "static readonly" instead of "const" because the value is
+        // calculated (8 x Plan), and C# constants must be plain values known at compile time.
+        static readonly Vector2 CoreCentre   = new Vector2(30f, 50f) * LevelSize.Plan; // (x, z)
+        static readonly float   CoreRadius   = 8f * LevelSize.Plan;
+        static readonly float   PillarRadius = 1.5f * LevelSize.Plan;
+        // Enough pieces that each straight piece is about half a metre long, whatever the Core's size.
+        // That keeps the slits beside the two Core doorways narrower than the player (1 m wide).
+        static readonly int CoreWallSegments = Mathf.CeilToInt(2f * Mathf.PI * CoreRadius / 0.5f);
 
         // The Core floor sits 1 cm lower than everything else. Corridor floors poke slightly into
         // the Core, and two surfaces at exactly the same height flicker ("z-fighting").
@@ -57,6 +65,9 @@ namespace Override.EditorTools
         // You never cut doorways by hand: the builder finds where each corridor touches a room
         // and leaves an opening in that wall, with a "lintel" (header) above it if the corridor
         // is lower than the room. That lintel is what makes a vent crouch-only.
+        //
+        // These numbers are DESIGN UNITS from the original 60 x 50 m plan. Room and Corridor multiply
+        // them by LevelSize.Plan, so to make the whole level bigger or smaller, change Plan, not these.
 
         static List<Room> BuildRoomList()
         {
@@ -179,7 +190,7 @@ namespace Override.EditorTools
             var cam = Camera.main;
             if (cam != null)
             {
-                cam.transform.position = new Vector3(30f, 1.7f, 2f);
+                cam.transform.position = new Vector3(LevelSize.S(30f), 1.7f, LevelSize.S(2f));
                 cam.transform.rotation = Quaternion.identity;
             }
 
@@ -482,8 +493,13 @@ namespace Override.EditorTools
         static bool Overlaps(float aMin, float aMax, float bMin, float bMax) => aMin < bMax && bMin < aMax;
         static bool Same(float a, float b) => Mathf.Abs(a - b) < 0.01f;
 
+        // Positions are scaled with the plan; the wall's thickness is not (walls don't get fatter).
         static Area WallAlongZ(float x, float zFrom, float zTo) =>
-            new Area(x - WallThickness / 2f, zFrom, x + WallThickness / 2f, zTo);
+            new Area(LevelSize.S(x) - WallThickness / 2f, LevelSize.S(zFrom), LevelSize.S(x) + WallThickness / 2f, LevelSize.S(zTo));
+
+        // Builds an Area from design units (the numbers in the LAYOUT section) in real metres.
+        static Area Scaled(float xMin, float zMin, float xMax, float zMax) =>
+            new Area(LevelSize.S(xMin), LevelSize.S(zMin), LevelSize.S(xMax), LevelSize.S(zMax));
 
         // ==================================================================
         // DATA TYPES
@@ -520,9 +536,10 @@ namespace Override.EditorTools
             public readonly List<Opening> openings = new List<Opening>();
             public readonly List<Area> interiorWalls = new List<Area>();
 
+            // Takes design units and stores real metres, so the LAYOUT numbers never need rewriting.
             public Room(string name, float xMin, float zMin, float xMax, float zMax, float height, string floorMat)
             {
-                this.name = name; area = new Area(xMin, zMin, xMax, zMax);
+                this.name = name; area = Scaled(xMin, zMin, xMax, zMax);
                 this.height = height; this.floorMat = floorMat;
             }
 
@@ -541,16 +558,18 @@ namespace Override.EditorTools
             public Corridor(string name, float xMin, float zMin, float xMax, float zMax,
                             float height, bool alongZ, bool dark = false)
             {
-                this.name = name; area = new Area(xMin, zMin, xMax, zMax);
+                this.name = name; area = Scaled(xMin, zMin, xMax, zMax);
                 this.height = height; this.alongZ = alongZ; this.dark = dark;
             }
 
             // A north-south corridor whose far end is the Core wall. Its floor runs until the
             // further of its two edges reaches that wall, so there's no gap at the doorway.
+            // CoreWallZ works in real metres, so the edges are scaled before asking it, and the answer
+            // is turned back into design units because the constructor scales everything once more.
             public static Corridor IntoCore(string name, float xMin, float zMin, float xMax, float height, bool dark)
             {
-                float zMax = Mathf.Max(CoreWallZ(xMin), CoreWallZ(xMax));
-                return new Corridor(name, xMin, zMin, xMax, zMax, height, true, dark) { intoCore = true };
+                float zMaxMetres = Mathf.Max(CoreWallZ(LevelSize.S(xMin)), CoreWallZ(LevelSize.S(xMax)));
+                return new Corridor(name, xMin, zMin, xMax, zMaxMetres / LevelSize.Plan, height, true, dark) { intoCore = true };
             }
         }
     }

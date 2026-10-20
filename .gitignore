@@ -113,3 +113,6 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Files moved out of Assets for review before deleting
+/_to_delete/
