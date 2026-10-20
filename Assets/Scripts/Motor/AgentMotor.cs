@@ -1,5 +1,5 @@
 using UnityEngine;
-using Override.Core; 
+using Override.Core;
 
 namespace Override.Motor
 {
@@ -12,6 +12,9 @@ namespace Override.Motor
         private IAgentBrain brain;
         private CharacterController controller;
         private Transform playerTransform;
+        
+        private int currentPathIndex = 0; 
+        private Vector3 lastPathFirstNode = Vector3.zero; // Tracks the FIRST node only
 
         private void Awake()
         {
@@ -21,19 +24,14 @@ namespace Override.Motor
 
         private void Start()
         {
-            // CACHE IT ONCE at the start
             GameObject playerObj = GameObject.FindWithTag("Player");
-            if (playerObj != null)
-            {
-                playerTransform = playerObj.transform;
-            }
+            if (playerObj != null) playerTransform = playerObj.transform;
         }
 
         private void Update()
         {
             if (brain == null || playerTransform == null) return;
 
-            // No more Find() inside Update!
             WorldSnapshot currentSnapshot = new WorldSnapshot
             {
                 PlayerPosition = playerTransform.position,
@@ -44,8 +42,24 @@ namespace Override.Motor
 
             if (command.Path != null && command.Path.Length > 0)
             {
-                Vector3 targetPoint = command.Path[0];
-                Vector3 direction = (targetPoint - transform.position).normalized;
+                // Reset index ONLY if the first node of the path has changed
+                if (lastPathFirstNode != command.Path[0])
+                {
+                    currentPathIndex = 0;
+                    lastPathFirstNode = command.Path[0];
+                }
+
+                // Clamp index to prevent out of bounds
+                if (currentPathIndex >= command.Path.Length) 
+                {
+                    currentPathIndex = command.Path.Length - 1;
+                }
+
+                Vector3 targetPoint = command.Path[currentPathIndex];
+                
+                Vector3 direction = targetPoint - transform.position;
+                direction.y = 0; 
+                direction = direction.normalized;
                 
                 controller.Move(direction * moveSpeed * Time.deltaTime);
 
@@ -53,6 +67,17 @@ namespace Override.Motor
                 {
                     Quaternion targetRotation = Quaternion.LookRotation(direction);
                     transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+                }
+
+                float distanceToTarget = Vector3.Distance(new Vector3(transform.position.x, 0, transform.position.z), 
+                                                        new Vector3(targetPoint.x, 0, targetPoint.z));
+
+                if (distanceToTarget < 1.5f)
+                {
+                    if (currentPathIndex < command.Path.Length - 1)
+                    {
+                        currentPathIndex++; 
+                    }
                 }
             }
         }

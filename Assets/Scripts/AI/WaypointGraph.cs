@@ -50,6 +50,8 @@ public class WaypointGraph : MonoBehaviour
 
                 Vector3 dir = nodeB.position - nodeA.position;
                 float dist = dir.magnitude;
+
+                Debug.DrawRay(nodeA.position, dir.normalized * dist, Color.red, 5f);
                 
                 // Note: For the raycast to work, your wall cube MUST have a Collider!
                 if (!Physics.Raycast(nodeA.position, dir.normalized, dist))
