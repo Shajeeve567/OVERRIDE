@@ -1,0 +1,133 @@
+/* OVERRIDE start screen. Palette from GDD Section 9:
+   cool greys/white, teal facility accent, red for ARGUS. */
+
+.root {
+    flex-grow: 1;
+    background-color: rgb(10, 12, 16);
+    justify-content: center;
+    align-items: center;
+}
+
+.hidden {
+    display: none;
+}
+
+/* ---------- Main menu ---------- */
+
+.menu {
+    align-items: center;
+}
+
+.facility {
+    color: rgb(120, 135, 145);
+    font-size: 14px;
+    letter-spacing: 6px;
+    margin-bottom: 4px;
+}
+
+.title {
+    color: rgb(235, 240, 242);
+    font-size: 110px;
+    -unity-font-style: bold;
+    letter-spacing: 18px;
+    -unity-text-align: middle-center;
+}
+
+.accent {
+    width: 380px;
+    height: 2px;
+    background-color: rgb(210, 40, 40);
+    margin-top: 4px;
+    margin-bottom: 12px;
+}
+
+.argus {
+    color: rgb(220, 45, 45);
+    font-size: 16px;
+    letter-spacing: 4px;
+    margin-bottom: 48px;
+}
+
+/* ---------- Buttons ---------- */
+
+.menu-button {
+    width: 320px;
+    height: 52px;
+    margin: 6px;
+    background-color: rgba(255, 255, 255, 0.03);
+    border-width: 1px;
+    border-color: rgb(60, 70, 78);
+    border-radius: 2px;
+    color: rgb(200, 210, 215);
+    font-size: 18px;
+    letter-spacing: 4px;
+    -unity-font-style: bold;
+    transition-duration: 0.12s;
+}
+
+.menu-button:hover {
+    border-color: rgb(0, 200, 190);
+    color: rgb(0, 225, 210);
+    background-color: rgba(0, 200, 190, 0.08);
+}
+
+.menu-button:active {
+    background-color: rgba(0, 200, 190, 0.2);
+}
+
+.primary {
+    border-color: rgb(0, 170, 160);
+}
+
+/* ---------- Controls panel ---------- */
+
+.panel {
+    align-items: center;
+    padding: 32px;
+    background-color: rgba(20, 24, 30, 0.95);
+    border-width: 1px;
+    border-color: rgb(60, 70, 78);
+}
+
+.panel-title {
+    color: rgb(235, 240, 242);
+    font-size: 32px;
+    -unity-font-style: bold;
+    letter-spacing: 8px;
+    margin-bottom: 20px;
+}
+
+.controls-list {
+    width: 420px;
+    margin-bottom: 20px;
+}
+
+.control-row {
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 6px 4px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(40, 46, 52);
+}
+
+.control-action {
+    color: rgb(170, 180, 186);
+    font-size: 16px;
+}
+
+.control-key {
+    color: rgb(0, 210, 195);
+    font-size: 16px;
+    -unity-font-style: bold;
+}
+
+/* ---------- Footer ---------- */
+
+.footer {
+    position: absolute;
+    bottom: 20px;
+    right: 28px;
+    color: rgb(80, 90, 98);
+    font-size: 12px;
+    letter-spacing: 2px;
+}
