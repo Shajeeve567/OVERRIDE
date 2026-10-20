@@ -44,7 +44,8 @@ namespace Override.EditorTools
         static readonly Vector3 BulletSpawnOffset = new Vector3(-0.721f, 0.031f, 0.063f); // the muzzle
 
         // Where the player goes if the greybox level is open: inside the airlock, feet on the floor.
-        static readonly Vector3 AirlockSpawn = new Vector3(30f, 1f, 3f);
+        // (30, 3) is the airlock's centre in design units; LevelSize scales it to match the built level.
+        static readonly Vector3 AirlockSpawn = new Vector3(LevelSize.S(30f), 1f, LevelSize.S(3f));
 
         // ==================================================================
         [MenuItem("OVERRIDE/Create Player Prefab")]
