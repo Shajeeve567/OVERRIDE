@@ -13,6 +13,8 @@
 //     Terminals       HackTerminal + progress ring on the four placeholders (Core: 30 s, needs T1-T3)
 //     Doors           a SlidingDoor + LockableDoor in each main corridor (same table as the stand-in doors)
 //     Director        DirectorBridge, and the stand-in drone as its drone prefab until the Wisp exists
+//     Cameras         SecurityCameraSensor on Shajeeve's camera prefab (sightings for the Seeker)
+//     Seeker          one Seeker in Maintenance, built by HunterSetup if the prefab doesn't exist yet
 //     Debug           NoiseDebugView + ObjectivesOverlay
 //     _STANDINS       removed if present (it would add duplicate health, terminals and doors)
 
@@ -80,6 +82,8 @@ namespace Override.EditorTools
             InstallTerminals(log);
             InstallDoors(log);
             InstallDirector(log);
+            log.AppendLine(HunterSetup.EnsureCameraSensors());
+            log.AppendLine(HunterSetup.PlaceInMaintenance());
             InstallDebug(log);
 
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
