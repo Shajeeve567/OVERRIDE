@@ -5,6 +5,8 @@
 //   - Every 2 s of hacking it beeps: a 20 m noise that draws the Hunter.
 //   - The first touch raises HackStarted (the Director's defence-wave trigger);
 //     finishing raises TerminalOverridden once.
+//   - The Core console (requiresOtherTerminals) stays locked until Labs, Maintenance and ServerHall
+//     are done, and takes 30 s (GDD: "the final core override is a 30-second hold").
 
 using Override.Core;
 using UnityEngine;
@@ -20,6 +22,8 @@ namespace Override.Interaction
         [SerializeField] float hackDuration = 8f;     // seconds of holding E
         [SerializeField] float useRange = 2f;         // metres from the terminal's surface
         [SerializeField] float damagePause = 1f;      // seconds progress stops after each hit
+        [Tooltip("Tick on the Core console: usable only after the other three terminals are overridden.")]
+        [SerializeField] bool requiresOtherTerminals;
 
         [Header("Beep noise (GDD)")]
         [SerializeField] float beepRadius = 20f;
@@ -47,8 +51,40 @@ namespace Override.Interaction
         public bool IsOverridden { get; private set; }
         public bool IsPausedByDamage => Time.time < pausedUntil;
 
-        public string Prompt => started ? "Resume hack (hold)" : "Hack terminal (hold)";
+        // Which terminals are done this run. Static: every terminal shares it; cleared when Play starts.
+        static readonly System.Collections.Generic.HashSet<ZoneId> done = new System.Collections.Generic.HashSet<ZoneId>();
+        static readonly ZoneId[] Prerequisites = { ZoneId.Labs, ZoneId.Maintenance, ZoneId.ServerHall };
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetOnPlay() => done.Clear();
+
+        public static int TerminalsDone => done.Count;
+
+        public bool IsLockedByPrerequisites
+        {
+            get
+            {
+                if (!requiresOtherTerminals) return false;
+                foreach (var z in Prerequisites) if (!done.Contains(z)) return true;
+                return false;
+            }
+        }
+
+        public string Prompt =>
+            IsLockedByPrerequisites ? "Locked: override Terminals 1-3 first" :
+            started ? "Resume hack (hold)" : "Hack terminal (hold)";
+
+        // Locked consoles still show their prompt (so the player knows why), but Interact does nothing.
         public bool CanInteract => !IsOverridden;
+
+        /// Set up from code (the integration tool) before the scene is saved.
+        public void Configure(ZoneId zoneId, bool needsOthers, float duration, ProgressRing progressRing)
+        {
+            zone = zoneId;
+            requiresOtherTerminals = needsOthers;
+            hackDuration = duration;
+            ring = progressRing;
+        }
 
         void Awake() => body = GetComponentInChildren<Collider>();
 
@@ -62,7 +98,7 @@ namespace Override.Interaction
 
         public void Interact(PlayerInteractor player)
         {
-            if (IsOverridden) return;
+            if (IsOverridden || IsLockedByPrerequisites) return;
             hacking = true;
             beepTimer = 0f;   // beep straight away: starting a hack is loud
             if (!started)
@@ -74,7 +110,7 @@ namespace Override.Interaction
 
         public bool HoldTick(PlayerInteractor player, float deltaTime)
         {
-            if (IsOverridden) return false;
+            if (IsOverridden || !hacking) return false;
             if (DistanceTo(player.transform.position) > useRange) return false;
 
             beepTimer -= deltaTime;
@@ -109,6 +145,7 @@ namespace Override.Interaction
         {
             IsOverridden = true;
             hacking = false;
+            done.Add(zone);
             GameEvents.RaiseTerminalOverridden(zone);
             onOverridden?.Invoke();
         }
