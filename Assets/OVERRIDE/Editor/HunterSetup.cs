@@ -33,7 +33,9 @@ namespace Override.EditorTools
             var body = root.AddComponent<Rigidbody>();
             body.isKinematic = true;
             body.useGravity = false;
-            root.AddComponent<Health>().Configure(150f, false);   // GDD: 150 HP; disabled on death, never respawns
+            var health = root.AddComponent<Health>();
+            health.Configure(150f, false);   // GDD: 150 HP; disabled on death, never respawns
+            SetAmmoDrop(health);
             var hunter = root.AddComponent<HunterBody>();
             root.AddComponent<HunterDebugView>();
 
@@ -63,6 +65,36 @@ namespace Override.EditorTools
             Object.DestroyImmediate(root);
             Debug.Log($"[Hunter] Saved {PrefabPath}");
             return prefab;
+        }
+
+        const string AmmoDropPrefab = "Assets/OVERRIDE/Prefabs/AmmoDrop.prefab";
+
+        /// GDD: destroyed units drop ammo. Returns false if the AmmoDrop prefab is missing.
+        static bool SetAmmoDrop(Health health)
+        {
+            var drop = AssetDatabase.LoadAssetAtPath<GameObject>(AmmoDropPrefab);
+            if (drop == null) return false;
+            var so = new SerializedObject(health);
+            so.FindProperty("dropOnDeath").objectReferenceValue = drop;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            return true;
+        }
+
+        /// Brings an existing Seeker prefab up to date (ammo drop on death). Returns a log line.
+        public static string UpgradePrefab()
+        {
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) == null) return "  = no Seeker prefab yet";
+            var root = PrefabUtility.LoadPrefabContents(PrefabPath);
+            try
+            {
+                var health = root.GetComponent<Health>();
+                var so = new SerializedObject(health);
+                if (so.FindProperty("dropOnDeath").objectReferenceValue != null) return "  = Seeker already drops ammo";
+                if (!SetAmmoDrop(health)) return "  ! no " + AmmoDropPrefab + ": Seeker drops nothing";
+                PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
+                return "  + Seeker now drops an AmmoDrop on death";
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); }
         }
 
         /// Puts one Seeker in Maintenance (GDD start zone) if the scene has none. Returns a log line.

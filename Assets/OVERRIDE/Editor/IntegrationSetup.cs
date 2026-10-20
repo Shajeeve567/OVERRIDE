@@ -85,6 +85,7 @@ namespace Override.EditorTools
             InstallDoors(log);
             InstallDirector(log);
             log.AppendLine(HunterSetup.EnsureCameraSensors());
+            log.AppendLine(HunterSetup.UpgradePrefab());
             log.AppendLine(HunterSetup.PlaceInMaintenance());
             InstallDebug(log);
 
