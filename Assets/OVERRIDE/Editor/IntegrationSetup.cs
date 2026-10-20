@@ -94,6 +94,16 @@ namespace Override.EditorTools
             EditorUtility.DisplayDialog("Integration", "Done. Check the Console for details, then save the scene (Cmd+S).", "OK");
         }
 
+        /// For teammates' test scenes: only replaces the player (movement, rifle, health), nothing else.
+        [MenuItem("OVERRIDE/Integration/Swap In Gunitha's Player Only")]
+        public static void SwapPlayerOnly()
+        {
+            var log = new System.Text.StringBuilder("[Integration]\n");
+            SwapPlayer(log);
+            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            Debug.Log(log.ToString());
+        }
+
         // ------------------------------------------------------------------ prefabs
 
         static void AddToPrefab<T>(string path, System.Text.StringBuilder log, System.Action<T> setup) where T : Component
