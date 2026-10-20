@@ -44,6 +44,10 @@ namespace Override.EditorTools
         const float WaypointOut = 2.5f;  // waypoint this far out from the hatch
         const float CrateOut = 1.2f;     // crate this far out...
         const float CrateAside = 1.6f;   // ...and this far to one side, so the bay starts OPEN
+        // The player's body weighs 1 kg. A crate lighter than that gets shoved aside just by walking
+        // into it, which makes blocking a bay a quick, readable player choice. (The corridor
+        // barricades stay 80 kg: those are meant to be a slow, deliberate push.)
+        const float BlockerMass = 0.8f;
 
         // The terminal each zone's bays hide from, by the names PropBuilder gives them.
         static readonly Dictionary<string, string> Terminals = new Dictionary<string, string>
@@ -183,6 +187,8 @@ namespace Override.EditorTools
                     new Vector3(hatch.x, pos.y, hatch.z) + b.facing * CrateOut + side * CrateAside,
                     Quaternion.LookRotation(b.facing));
                 bay.blocker = crate.GetComponent<Rigidbody>();
+                bay.blocker.mass = BlockerMass;   // only this copy: the CrateBarricade prefab stays 80 kg
+                PrefabUtility.RecordPrefabInstancePropertyModifications(bay.blocker);
 
                 // Changes made to a prefab COPY from code must be recorded, or Unity drops them on save.
                 PrefabUtility.RecordPrefabInstancePropertyModifications(bay);
