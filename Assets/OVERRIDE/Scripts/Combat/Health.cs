@@ -18,6 +18,8 @@ namespace Override.Combat
         [Tooltip("Optional pickup spawned where this dies (GDD: ammo drops from destroyed units).")]
         [SerializeField] GameObject dropOnDeath;
         [SerializeField] bool disableOnDeath = true;   // the Agent Controller can swap this for a death animation
+        [Tooltip("Destroy instead of disable. Director drones need this: it counts destroyed (null) drones as gone.")]
+        [SerializeField] bool destroyOnDeath;
 
         public float Max => maxHealth;
         public float Current { get; private set; }
@@ -31,6 +33,14 @@ namespace Override.Combat
         public event Action Healed;
 
         void Awake() => Current = maxHealth;
+
+        /// Set up from code (e.g. the integration tool or a spawner) before the first hit.
+        public void Configure(float max, bool destroy)
+        {
+            maxHealth = max;
+            Current = max;
+            destroyOnDeath = destroy;
+        }
 
         public void TakeDamage(float amount, Vector3 hitPoint, Vector3 hitNormal)
         {
@@ -69,7 +79,8 @@ namespace Override.Combat
                 return;   // the player object stays; PlayerDeath freezes it and game flow shows the lose screen
             }
             if (dropOnDeath != null) Instantiate(dropOnDeath, transform.position + Vector3.up * 0.3f, Quaternion.identity);
-            if (disableOnDeath) gameObject.SetActive(false);
+            if (destroyOnDeath) Destroy(gameObject);
+            else if (disableOnDeath) gameObject.SetActive(false);
         }
     }
 }
