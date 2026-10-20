@@ -196,7 +196,7 @@ namespace Override.EditorTools
                 foreach (var col in c.GetComponentsInChildren<Collider>())
                     if (col.transform.name.StartsWith("Wall")) wallTop = Mathf.Max(wallTop, col.bounds.max.y);
                 float height = wallTop - f.max.y;
-                bool alongZ = f.size.z > f.size.x;
+                bool alongZ = RunsAlongZ(entry.zoneA, entry.zoneB, f);
                 float width = alongZ ? f.size.x : f.size.z;
 
                 // The slab IS the door: SlidingDoor needs its Rigidbody and collider on the same object.
@@ -230,6 +230,27 @@ namespace Override.EditorTools
                 log.AppendLine($"  + {slab.name} ({width:0.0} x {height:0.0} m{(entry.sealedAtStart ? ", sealed until T1-T3" : "")})");
                 id++;
             }
+        }
+
+        /// Which way a corridor runs. The two rooms it joins decide it: the corridor runs along the axis
+        /// between their floor centres. (Comparing the corridor's own length and width fails on square
+        /// corridors: Airlock-Labs is 5 x 5 m, and that guess stood the door lengthwise.)
+        static bool RunsAlongZ(string zoneA, string zoneB, Bounds corridorFloor)
+        {
+            if (TryRoomCentre(zoneA, out Vector3 a) && TryRoomCentre(zoneB, out Vector3 b))
+            {
+                Vector3 d = b - a;
+                return Mathf.Abs(d.z) > Mathf.Abs(d.x);
+            }
+            return corridorFloor.size.z > corridorFloor.size.x;   // fallback for unknown rooms
+        }
+
+        static bool TryRoomCentre(string zone, out Vector3 centre)
+        {
+            var floor = GameObject.Find($"OVERRIDE_Greybox/{zone}/Floor");
+            var col = floor != null ? floor.GetComponent<Collider>() : null;
+            centre = col != null ? col.bounds.center : Vector3.zero;
+            return col != null;
         }
 
         static void InstallDirector(System.Text.StringBuilder log)
