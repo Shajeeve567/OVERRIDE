@@ -1,0 +1,27 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="StartScreen.uss" />
+
+    <ui:VisualElement name="root" class="root">
+
+        <!-- Main menu -->
+        <ui:VisualElement name="menu" class="menu">
+            <ui:Label text="KESTREL AUTONOMY RESEARCH COMPLEX" class="facility" />
+            <ui:Label text="OVERRIDE" class="title" />
+            <ui:VisualElement class="accent" />
+            <ui:Label name="argus-line" text="ARGUS: INTRUDER PROTOCOL ACTIVE" class="argus" />
+
+            <ui:Button name="start-button" text="START OVERRIDE" class="menu-button primary" />
+            <ui:Button name="controls-button" text="CONTROLS" class="menu-button" />
+            <ui:Button name="quit-button" text="QUIT" class="menu-button" />
+        </ui:VisualElement>
+
+        <!-- Controls panel (hidden until CONTROLS is clicked) -->
+        <ui:VisualElement name="controls-panel" class="panel hidden">
+            <ui:Label text="CONTROLS" class="panel-title" />
+            <ui:VisualElement name="controls-list" class="controls-list" />
+            <ui:Button name="back-button" text="BACK" class="menu-button" />
+        </ui:VisualElement>
+
+        <ui:Label text="SE3032 × SE3062" class="footer" />
+    </ui:VisualElement>
+</ui:UXML>
