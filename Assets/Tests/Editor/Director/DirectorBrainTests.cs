@@ -163,6 +163,47 @@ namespace Override.DirectorAI.Tests
         }
 
         // ==================================================================
+        // Doors: only the player's own exits matter
+        // ==================================================================
+        [Test]
+        public void OnlyLocksOnThePlayersExits_AddPressure()
+        {
+            var s = Snapshot(NearT1, "Labs");
+            s.Doors = new[] { new DoorInfo { Id = 0, PlayerZoneExit = true }, new DoorInfo { Id = 1, PlayerZoneExit = false } };
+            var cost = new DirectorCost(s, 1f, new DirectorWeights(), null);
+
+            var exitLocked = new DirectorPlan(s.Bays.Length, 2); exitLocked.LockDoor[0] = true;
+            var farLocked = new DirectorPlan(s.Bays.Length, 2); farLocked.LockDoor[1] = true;
+
+            Assert.Greater(cost.Explain(exitLocked).PredictedPressure, 0f, "locking the player's exit cuts their options");
+            Assert.AreEqual(0f, cost.Explain(farLocked).PredictedPressure, "a far-away door does nothing to the player");
+        }
+
+        [Test]
+        public void FarAwayDoors_AreNeverLocked()
+        {
+            var s = Snapshot(NearT1, "Labs", sinceFight: 120f);   // idle player: the Director wants pressure
+            s.Doors = new[] { new DoorInfo { Id = 0 }, new DoorInfo { Id = 1 }, new DoorInfo { Id = 2 } };
+            for (int seed = 0; seed < 20; seed++)
+                Assert.AreEqual(0, Brain(seed: seed).Decide(s).Plan.LockCount, "no door here is an exit of the Labs");
+        }
+
+        [Test]
+        public void OldLock_IsReleased_OnceThePlayerHasMovedOn()
+        {
+            // Last decision locked door 0 while it was the player's exit. Now the player is elsewhere,
+            // so that lock does nothing: keeping it must cost more than unlocking it.
+            var s = Snapshot(InCore, "Core");
+            s.Doors = new[] { new DoorInfo { Id = 0, PlayerZoneExit = false } };
+            var previous = new DirectorPlan(s.Bays.Length, 1); previous.LockDoor[0] = true;
+            var cost = new DirectorCost(s, 0f, new DirectorWeights(), previous);
+
+            var keep = new DirectorPlan(s.Bays.Length, 1); keep.LockDoor[0] = true;
+            var release = new DirectorPlan(s.Bays.Length, 1);
+            Assert.Less(cost.Evaluate(release), cost.Evaluate(keep));
+        }
+
+        // ==================================================================
         // The algorithm comparison (viva evidence)
         // ==================================================================
         [Test]
