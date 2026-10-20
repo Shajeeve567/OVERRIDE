@@ -45,13 +45,19 @@ namespace Override.Interaction
         bool hingeSignKnown;
 
         public bool IsOpen => Mathf.Abs(hinge.angle) > openThreshold;
-        public string Prompt => wantsOpen ? "Close door" : "Open door";
+        LockableDoor lockable;   // optional: Director lock and Core seal
+
+        public string Prompt =>
+            lockable != null && lockable.IsSealed ? "Sealed: override Terminals 1-3" :
+            lockable != null && lockable.IsDirectorLocked ? "Locked by ARGUS" :
+            wantsOpen ? "Close door" : "Open door";
         public bool CanInteract => true;
 
         void Awake()
         {
             body = GetComponent<Rigidbody>();
             box = GetComponent<BoxCollider>();
+            lockable = GetComponent<LockableDoor>();
 
             body.mass = mass;
             body.interpolation = RigidbodyInterpolation.None;               // the camera never follows a door
@@ -76,6 +82,7 @@ namespace Override.Interaction
 
         public void SetOpen(bool open, Transform opener = null)
         {
+            if (open && lockable != null && lockable.IsLocked) return;   // locked doors only close
             if (open == wantsOpen) return;
             wantsOpen = open;
             ApplyTarget(open ? SwingAwayFrom(opener) * openAngle : 0f);

@@ -42,12 +42,18 @@ namespace Override.Interaction
         public float OpenFraction { get; private set; }
         public bool IsOpen => OpenFraction >= openThreshold;
         public bool IsBlocked { get; private set; }
-        public string Prompt => wantsOpen ? "Close door" : "Open door";
+        LockableDoor lockable;   // optional: Director lock and Core seal
+
+        public string Prompt =>
+            lockable != null && lockable.IsSealed ? "Sealed: override Terminals 1-3" :
+            lockable != null && lockable.IsDirectorLocked ? "Locked by ARGUS" :
+            wantsOpen ? "Close door" : "Open door";
         public bool CanInteract => true;
 
         void Awake()
         {
             body = GetComponent<Rigidbody>();
+            lockable = GetComponent<LockableDoor>();
             body.isKinematic = true;
             body.interpolation = RigidbodyInterpolation.Interpolate;   // smooth motion in front of the camera
 
@@ -67,6 +73,7 @@ namespace Override.Interaction
 
         public void SetOpen(bool open, Transform opener = null)
         {
+            if (open && lockable != null && lockable.IsLocked) return;   // locked doors only close
             if (open == wantsOpen) return;
             wantsOpen = open;
             NoiseBus.Emit(transform.position, noiseRadius, NoiseKind.Door);
