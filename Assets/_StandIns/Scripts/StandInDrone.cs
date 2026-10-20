@@ -3,7 +3,10 @@
 // A red sphere that flies out of its bay to the bay's waypoint, then hovers after the player and
 // shoots (pretend hitscan: damage once a second while in range). Three bullet hits destroy it.
 // It flies through walls: real pathfinding is the Wisp's job, this only closes the Director's loop.
+// Integration: it also hurts the team's real player Health (any IDamageable), and the integration tool
+// gives the prefab a Health (60 HP, destroyed on death) so Gunitha's hitscan rifle can kill it.
 
+using Override.Core;
 using Override.Director;
 using UnityEngine;
 
@@ -23,6 +26,7 @@ namespace Override.StandIns
         bool leftBay;
         Transform player;
         StandInPlayerHealth health;
+        IDamageable playerDamageable;   // the team's real Health, when present
         DirectorController director;
         float age, shotTimer;
 
@@ -30,7 +34,11 @@ namespace Override.StandIns
         {
             firstStop = waypoint;
             player = target;
-            if (player != null) health = player.GetComponent<StandInPlayerHealth>();
+            if (player != null)
+            {
+                health = player.GetComponent<StandInPlayerHealth>();
+                playerDamageable = player.GetComponent<IDamageable>();
+            }
             director = FindFirstObjectByType<DirectorController>();
         }
 
@@ -55,7 +63,9 @@ namespace Override.StandIns
                     if (shotTimer >= shotInterval)
                     {
                         shotTimer = 0f;
-                        if (health != null) health.TakeDamage(damagePerShot);
+                        if (playerDamageable != null)
+                            playerDamageable.TakeDamage(damagePerShot, player.position + Vector3.up, -transform.forward);
+                        else if (health != null) health.TakeDamage(damagePerShot);
                     }
                 }
             }
