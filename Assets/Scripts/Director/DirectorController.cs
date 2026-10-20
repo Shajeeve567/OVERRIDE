@@ -66,6 +66,8 @@ namespace Override.Director
         public bool FinalWave => finalWave;
         public bool Defeated => defeated;
         public bool CamerasOnline => camerasOnline;
+        /// 0 to 100. The Seeker widens its search as the alarm rises (GDD Section 7).
+        public float Alarm => alarm;
         public bool DoorControlOnline => doorControlOnline;
         public int DroneBudgetNow => finalWave ? finalWaveBudgetNow : budgetNow;
         public int ActiveDrones => drones.Count;
