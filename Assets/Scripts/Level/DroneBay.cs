@@ -42,9 +42,12 @@ namespace Override.Level
 
         Vector3 CheckCentre => mouth.position + mouth.forward * mouthCheckHalfSize.z;
 
-        // True when a heavy movable object sits in front of the mouth.
-        // Checks ANY heavy crate, not only `blocker`: if the player pushes some other crate there,
-        // that blocks the bay just as well. (The Director's "every spawn point blocked" edge case.)
+        // True when this bay's own crate, or any other heavy movable object, sits in front of the mouth.
+        //   - Its own `blocker` always counts, however light. The bay crates are made LIGHTER than the
+        //     player (under 1 kg vs 1 kg) so they're easy to shove, so a weight rule alone would miss them.
+        //   - Anything else must weigh BlockingMass or more: then a heavy barricade crate pushed there
+        //     also blocks the bay, but a drone or a thrown canister never does.
+        // (The Director's "every spawn point blocked" edge case.)
         public bool IsBlocked
         {
             get
@@ -54,7 +57,8 @@ namespace Override.Level
                 for (int i = 0; i < count; i++)
                 {
                     var body = hits[i].attachedRigidbody;
-                    if (body != null && !body.isKinematic && body.mass >= BlockingMass) return true;
+                    if (body == null || body.isKinematic) continue;
+                    if (body == blocker || body.mass >= BlockingMass) return true;
                 }
                 return false;
             }
