@@ -319,7 +319,7 @@ namespace Override.Director
         {
             var kb = Keyboard.current;
             if (kb == null) return;
-            string here = player != null ? zones.ZoneOf(player.position) : "Unknown";
+            string here = player != null && zones != null ? zones.ZoneOf(player.position) : "Unknown";
 
             if (kb.f3Key.wasPressedThisFrame) showPanel = !showPanel;
             if (kb.f4Key.wasPressedThisFrame) nextDecision = Time.time;
@@ -344,7 +344,7 @@ namespace Override.Director
             GUILayout.BeginArea(new Rect(10, 10, 580, 540), GUI.skin.box);
             GUILayout.Label("<b>ARGUS Director</b>   F3 hide  F4 decide  F5 dmg  F6 hack  F7 override  F8 kill  F9 final  F10 SA/HD", Rich());
 
-            string zone = player != null ? zones.ZoneOf(player.position) : "-";
+            string zone = player != null && zones != null ? zones.ZoneOf(player.position) : "-";   // OnGUI can run before Start creates zones
             GUILayout.Label($"Player zone: {zone}    Drones alive: {drones.Count}/{DroneBudgetNow}    Next decision in {Mathf.Max(0, nextDecision - Time.time):0.0}s");
             GUILayout.Label($"Damage {recentDamage:0.00}   Since fight {Mathf.Min(999f, Time.time - lastEngagementTime):0}s   Alarm {alarm:0}");
             GUILayout.Label($"Cameras {(camerasOnline ? "ON" : "off")}   Door control {(doorControlOnline ? "ON" : "off")}   Doors locked {lockedDoors.Count}" +
