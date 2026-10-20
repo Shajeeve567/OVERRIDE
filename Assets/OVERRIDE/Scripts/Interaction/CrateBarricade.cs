@@ -15,7 +15,8 @@ namespace Override.Interaction
     public class CrateBarricade : MonoBehaviour, IHoldInteractable
     {
         [Header("Physics (starting values)")]
-        [SerializeField] float mass = 80f;            // kg: too heavy to shove by walking into it
+        [Tooltip("kg: too heavy to shove by walking into it. 0 = keep the Rigidbody's own mass (Shajeeve's light bay crates).")]
+        [SerializeField] float mass = 80f;
         [SerializeField] float linearDamping = 3f;    // stops quickly when released
         [SerializeField] float friction = 0.6f;
 
@@ -44,7 +45,7 @@ namespace Override.Interaction
             body = GetComponent<Rigidbody>();
             box = GetComponent<BoxCollider>();
 
-            body.mass = mass;
+            if (mass > 0f) body.mass = mass;
             body.linearDamping = linearDamping;
             // No rotation at all: it never tips over, and it can't twist and wedge itself in a doorway or corner.
             body.constraints = RigidbodyConstraints.FreezeRotation;
