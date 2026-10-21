@@ -192,6 +192,7 @@ public static class WardenGameplayIntegrationBuilder
                 throw new InvalidOperationException("Portable Warden clone is missing required components.");
 
             WardenVisualReferences references = portable.GetComponentInChildren<WardenVisualReferences>(true);
+            WardenWeakPointColliderUtility.Configure(portable);
             vision.Target = null;
             hearing.HearingRange = 15f;
             hearing.SensitivityMultiplier = 1f;
@@ -251,6 +252,8 @@ public static class WardenGameplayIntegrationBuilder
         }
         if (!Mathf.Approximately(health.Max, 200f) || !Mathf.Approximately(hearing.HearingRange, 15f))
             throw new InvalidOperationException("Exported Warden prefab contains integration-test balance values.");
+
+        WardenWeakPointColliderUtility.Validate(prefab);
     }
 
     private static WardenCoverPoint CreateCoverPoint(
@@ -328,5 +331,164 @@ public static class WardenGameplayIntegrationBuilder
             if (component != null) return component;
         }
         return null;
+    }
+}
+
+internal static class SeekerWeakPointColliderUtility
+{
+    private const string Path = "Assets/_Project/Prefabs/Visuals/SeekerVisual.prefab";
+    private const string SourceName = "SensorCore_WeakPoint";
+    private const string ProxyName = "SensorCore_WeakPoint_Collider";
+
+    [MenuItem("OVERRIDE/Core Developer/Fix Seeker Weak-Point Collider")]
+    public static void FixPrefabAsset()
+    {
+        GameObject root = PrefabUtility.LoadPrefabContents(Path);
+        try
+        {
+            Transform source = Find(root.transform, SourceName);
+            MeshFilter filter = source != null ? source.GetComponent<MeshFilter>() : null;
+            if (filter == null || filter.sharedMesh == null)
+                throw new InvalidOperationException("Seeker weak point has no source mesh.");
+
+            Transform proxy = root.transform.Find(ProxyName);
+            if (proxy == null)
+            {
+                proxy = new GameObject(ProxyName).transform;
+                proxy.SetParent(root.transform, false);
+            }
+            proxy.localPosition = root.transform.InverseTransformPoint(source.position);
+            proxy.localRotation = Quaternion.Inverse(root.transform.rotation) * source.rotation;
+            Vector3 sourceScale = source.lossyScale;
+            Vector3 rootScale = root.transform.lossyScale;
+            proxy.localScale = new Vector3(
+                sourceScale.x / rootScale.x,
+                sourceScale.y / rootScale.y,
+                sourceScale.z / rootScale.z);
+
+            MeshCollider collider = proxy.GetComponent<MeshCollider>();
+            if (collider == null) collider = proxy.gameObject.AddComponent<MeshCollider>();
+            collider.sharedMesh = filter.sharedMesh;
+            collider.convex = true;
+            SeekerWeakPoint weakPoint = proxy.GetComponent<SeekerWeakPoint>();
+            if (weakPoint == null) weakPoint = proxy.gameObject.AddComponent<SeekerWeakPoint>();
+            weakPoint.Configure(2f);
+
+            SeekerVisualReferences refs = root.GetComponent<SeekerVisualReferences>();
+            if (refs == null) throw new InvalidOperationException("Seeker references are missing.");
+            refs.Configure(
+                Require(root.transform, "SensorCore"),
+                Require(root.transform, "SensorHousing"),
+                proxy,
+                Require(root.transform, "LeftThruster"),
+                Require(root.transform, "RightThruster"));
+            if (PrefabUtility.SaveAsPrefabAsset(root, Path) == null)
+                throw new InvalidOperationException("Could not save corrected Seeker prefab.");
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(root);
+        }
+        AssetDatabase.SaveAssets();
+        Debug.Log("[Seeker] Corrected the live sensor-core weak-point collider.");
+    }
+
+    public static void FixFromCommandLine() { FixPrefabAsset(); }
+
+    private static Transform Find(Transform root, string name)
+    {
+        foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
+            if (child.name == name) return child;
+        return null;
+    }
+
+    private static Transform Require(Transform root, string name)
+    {
+        Transform result = Find(root, name);
+        if (result == null)
+            throw new InvalidOperationException("Seeker transform is missing: " + name);
+        return result;
+    }
+}
+
+internal static class WardenWeakPointColliderUtility
+{
+    internal static readonly Vector3 RearLocalSize = new Vector3(0.00545f, 0.00468f, 0.00260f);
+    internal const float EyeLocalRadius = 0.00208f;
+
+    private const string VisualPrefabPath = "Assets/_Project/Prefabs/Visuals/WardenVisual.prefab";
+
+    [MenuItem("OVERRIDE/Core Developer/Fix Warden Weak-Point Colliders")]
+    public static void FixPrefabAssets()
+    {
+        FixPrefab(VisualPrefabPath);
+        if (AssetDatabase.LoadAssetAtPath<GameObject>(WardenGameplayIntegrationBuilder.PrefabPath) != null)
+            FixPrefab(WardenGameplayIntegrationBuilder.PrefabPath);
+        AssetDatabase.SaveAssets();
+        Debug.Log("[Warden] Corrected and validated weak-point collider world scale.");
+    }
+
+    public static void FixFromCommandLine()
+    {
+        FixPrefabAssets();
+    }
+
+    internal static void Configure(GameObject root)
+    {
+        foreach (WardenWeakPoint weakPoint in root.GetComponentsInChildren<WardenWeakPoint>(true))
+        {
+            if (weakPoint.Type == WardenWeakPoint.WeakPointType.SensorEye)
+            {
+                SphereCollider sphere = weakPoint.GetComponent<SphereCollider>();
+                if (sphere == null)
+                    throw new InvalidOperationException("Warden sensor-eye weak point requires a SphereCollider.");
+                sphere.radius = EyeLocalRadius;
+            }
+            else
+            {
+                BoxCollider box = weakPoint.GetComponent<BoxCollider>();
+                if (box == null)
+                    throw new InvalidOperationException("Warden rear weak point requires a BoxCollider.");
+                box.size = RearLocalSize;
+            }
+        }
+    }
+
+    internal static void Validate(GameObject root)
+    {
+        WardenWeakPoint[] weakPoints = root.GetComponentsInChildren<WardenWeakPoint>(true);
+        if (weakPoints.Length != 2)
+            throw new InvalidOperationException("Warden prefab must contain exactly two weak points.");
+
+        foreach (WardenWeakPoint weakPoint in weakPoints)
+        {
+            if (weakPoint.Type == WardenWeakPoint.WeakPointType.SensorEye)
+            {
+                SphereCollider sphere = weakPoint.GetComponent<SphereCollider>();
+                if (sphere == null || !Mathf.Approximately(sphere.radius, EyeLocalRadius))
+                    throw new InvalidOperationException("Warden sensor-eye collider has an unsafe local radius.");
+            }
+            else
+            {
+                BoxCollider box = weakPoint.GetComponent<BoxCollider>();
+                if (box == null || (box.size - RearLocalSize).sqrMagnitude > 0.00000001f)
+                    throw new InvalidOperationException("Warden rear collider has an unsafe local size.");
+            }
+        }
+    }
+
+    private static void FixPrefab(string path)
+    {
+        GameObject contents = PrefabUtility.LoadPrefabContents(path);
+        try
+        {
+            Configure(contents);
+            Validate(contents);
+            PrefabUtility.SaveAsPrefabAsset(contents, path);
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(contents);
+        }
     }
 }

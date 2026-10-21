@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
 using Override.WardenAI;
+using UnityEditor;
 using UnityEngine;
 
 namespace Override.WardenGameplay.Tests
@@ -17,6 +18,7 @@ namespace Override.WardenGameplay.Tests
         private Type _hearingType;
         private Type _weaponType;
         private Type _healthType;
+        private Type _weakPointType;
 
         [SetUp]
         public void SetUp()
@@ -27,6 +29,7 @@ namespace Override.WardenGameplay.Tests
             _hearingType = FindType("HearingSensor");
             _weaponType = FindType("WardenWeapon");
             _healthType = FindType("Override.Combat.Health");
+            _weakPointType = FindType("WardenWeakPoint");
         }
 
         [TearDown]
@@ -437,6 +440,40 @@ namespace Override.WardenGameplay.Tests
             Assert.That(Read<Transform>(vision, "Target"), Is.SameAs(player.transform));
         }
 
+        [TestCase("Assets/_Project/Prefabs/WardenGameplay.prefab", 77f)]
+        [TestCase("Assets/_Project/Prefabs/Visuals/WardenVisual.prefab", 39f)]
+        public void WardenPrefab_WeakPointCollidersHaveSafeWorldDimensions(
+            string prefabPath,
+            float expectedCombinedScale)
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            Assert.That(prefab, Is.Not.Null);
+            GameObject instance = UnityEngine.Object.Instantiate(prefab);
+            _objects.Add(instance);
+            Physics.SyncTransforms();
+
+            Component[] weakPoints = instance.GetComponentsInChildren(_weakPointType, true);
+            Assert.That(weakPoints.Length, Is.EqualTo(2));
+
+            Component eye = weakPoints.Single(value => Read<object>(value, "Type").ToString() == "SensorEye");
+            Component rear = weakPoints.Single(value => Read<object>(value, "Type").ToString() == "RearVent");
+            SphereCollider eyeCollider = eye.GetComponent<SphereCollider>();
+            BoxCollider rearCollider = rear.GetComponent<BoxCollider>();
+
+            Assert.That(eyeCollider, Is.Not.Null);
+            Assert.That(rearCollider, Is.Not.Null);
+
+            float eyeWorldRadius = eyeCollider.radius * LargestAbsoluteComponent(eye.transform.lossyScale);
+            Vector3 rearWorldSize = Vector3.Scale(rearCollider.size, Absolute(rear.transform.lossyScale));
+            Assert.That(eyeWorldRadius, Is.EqualTo(0.00208f * expectedCombinedScale).Within(0.002f));
+            Assert.That(rearWorldSize.x, Is.EqualTo(0.00545f * expectedCombinedScale).Within(0.005f));
+            Assert.That(rearWorldSize.y, Is.EqualTo(0.00468f * expectedCombinedScale).Within(0.005f));
+            Assert.That(rearWorldSize.z, Is.EqualTo(0.00260f * expectedCombinedScale).Within(0.005f));
+
+            Assert.That(eyeCollider.bounds.size.x, Is.LessThan(0.4f));
+            Assert.That(rearCollider.bounds.size.magnitude, Is.LessThan(0.7f));
+        }
+
         private Component CreateComponent(string name, Type type)
         {
             return CreateObject(name).AddComponent(type);
@@ -491,6 +528,17 @@ namespace Override.WardenGameplay.Tests
                     candidate.Name == methodName && candidate.GetParameters().Length == argumentCount);
             Assert.That(method, Is.Not.Null, "Missing method: " + methodName);
             return method;
+        }
+
+        private static Vector3 Absolute(Vector3 value)
+        {
+            return new Vector3(Mathf.Abs(value.x), Mathf.Abs(value.y), Mathf.Abs(value.z));
+        }
+
+        private static float LargestAbsoluteComponent(Vector3 value)
+        {
+            value = Absolute(value);
+            return Mathf.Max(value.x, Mathf.Max(value.y, value.z));
         }
     }
 }
