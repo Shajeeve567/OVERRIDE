@@ -19,6 +19,7 @@
 //     Wardens         Ilzam's WardenGameplay: 1 guarding the Labs terminal, 2 the Server Hall (GDD Section 5),
 //                     each with current / advance / flank / retreat cover points
 //     Game flow       pause, death + respawn, victory screens (GameFlow, Shajeeve's UI style)
+//     Audio           GameAudio: synthesized sound effects driven by NoiseBus and game events
 //     Debug           NoiseDebugView + ObjectivesOverlay
 //     _STANDINS       removed if present (it would add duplicate health, terminals and doors)
 
@@ -92,6 +93,7 @@ namespace Override.EditorTools
             log.AppendLine(HunterSetup.PlaceInMaintenance());
             InstallWardens(log);
             InstallGameFlow(log);
+            InstallAudio(log);
             InstallDebug(log);
 
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
@@ -440,6 +442,32 @@ namespace Override.EditorTools
                 AssetDatabase.LoadAssetAtPath<UnityEngine.UIElements.StyleSheet>("Assets/UI/StartScreen/StartScreen.uss");
             so.ApplyModifiedPropertiesWithoutUndo();
             log.AppendLine("  + OVERRIDE_GameFlow (pause, game over + respawn, victory)");
+        }
+
+        static void InstallAudio(System.Text.StringBuilder log)
+        {
+            if (Object.FindFirstObjectByType<Override.Audio.GameAudio>() != null) { log.AppendLine("  = GameAudio already in the scene"); return; }
+            var go = new GameObject("OVERRIDE_Audio");
+            Undo.RegisterCreatedObjectUndo(go, "Install audio");
+            go.AddComponent<Override.Audio.GameAudio>();
+            log.AppendLine("  + OVERRIDE_Audio (synthesized sound effects)");
+        }
+
+        /// For Shajeeve's MainMenu scene: adds the animated backdrop behind his start screen.
+        [MenuItem("OVERRIDE/Integration/Add Animated Menu Background")]
+        public static void AddMenuBackground()
+        {
+            if (Object.FindFirstObjectByType<UnityEngine.UIElements.UIDocument>() == null)
+            {
+                EditorUtility.DisplayDialog("Integration", "Open the MainMenu scene first.", "OK");
+                return;
+            }
+            if (Object.FindFirstObjectByType<Override.UI.MenuBackground>() != null) { Debug.Log("[Integration] Menu background already added."); return; }
+            var go = new GameObject("OVERRIDE_MenuBackground");
+            Undo.RegisterCreatedObjectUndo(go, "Add menu background");
+            go.AddComponent<Override.UI.MenuBackground>();
+            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            Debug.Log("[Integration] Added the animated menu background. Save the scene.");
         }
 
         static void InstallDebug(System.Text.StringBuilder log)
