@@ -19,6 +19,7 @@
 //     Wardens         Ilzam's WardenGameplay: 1 guarding the Labs terminal, 2 the Server Hall (GDD Section 5),
 //                     each with current / advance / flank / retreat cover points
 //     Game flow       pause, death + respawn, victory screens (GameFlow, Shajeeve's UI style)
+//     HUD             GameHUD (UI Toolkit, replaces the temporary IMGUI overlays at runtime)
 //     Audio           GameAudio: synthesized sound effects driven by NoiseBus and game events
 //     Debug           NoiseDebugView + ObjectivesOverlay
 //     _STANDINS       removed if present (it would add duplicate health, terminals and doors)
@@ -94,6 +95,7 @@ namespace Override.EditorTools
             InstallWardens(log);
             InstallGameFlow(log);
             InstallAudio(log);
+            InstallHUD(log);
             InstallDebug(log);
 
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
@@ -370,6 +372,22 @@ namespace Override.EditorTools
 
             var director = Object.FindFirstObjectByType<DirectorController>();
             var player = GameObject.FindWithTag("Player");
+
+            // Every corridor floor, grown by 4 m: the doorway areas Wardens must keep out of.
+            var corridorBlocks = new System.Collections.Generic.List<Bounds>();
+            var corridors = GameObject.Find("OVERRIDE_Greybox/Corridors");
+            if (corridors != null)
+                foreach (Transform c in corridors.transform)
+                {
+                    var f = c.Find("Floor");
+                    if (f != null && f.TryGetComponent(out Collider fc))
+                    {
+                        Bounds b = fc.bounds;
+                        b.Expand(new Vector3(8f, 0f, 8f));   // 4 m each side
+                        corridorBlocks.Add(b);
+                    }
+                }
+
             var root = new GameObject("OVERRIDE_Wardens").transform;
             Undo.RegisterCreatedObjectUndo(root.gameObject, "Install Wardens");
 
@@ -383,6 +401,9 @@ namespace Override.EditorTools
                 if (terminal == null || floorCol == null) { log.AppendLine($"  ! no terminal or floor for {zone}: its Wardens skipped"); continue; }
 
                 // Guard between the terminal and the room's centre, facing into the room.
+                // Every point is then made safe (Safe below): inside the room and clear of corridor
+                // mouths, so a Warden can never park in a doorway and block the route.
+                Bounds room = floorCol.bounds;
                 float y = floorCol.bounds.max.y;
                 Vector3 term = new Vector3(terminal.transform.position.x, y, terminal.transform.position.z);
                 Vector3 centre = new Vector3(floorCol.bounds.center.x, y, floorCol.bounds.center.z);
@@ -392,7 +413,7 @@ namespace Override.EditorTools
                 for (int k = 0; k < count; k++)
                 {
                     float lateral = (k - (count - 1) / 2f) * 7f;          // two Wardens stand 7 m apart
-                    Vector3 at = term + into * 6f + side * lateral;
+                    Vector3 at = Safe(term + into * 6f + side * lateral, room, centre, corridorBlocks);
                     float flankSide = lateral < 0f ? -1f : 1f;
 
                     var warden = (GameObject)PrefabUtility.InstantiatePrefab(prefab, EditorSceneManager.GetActiveScene());
@@ -405,9 +426,9 @@ namespace Override.EditorTools
                     covers.SetParent(root, true);
                     // Same cover qualities as Ilzam's integration test.
                     var current = Cover("Current", at, 0.75f, covers);
-                    var advance = Cover("Advance", at + into * 4f, 0.85f, covers);
-                    var flank = Cover("Flank", at + side * (6f * flankSide) + into * 2f, 0.85f, covers);
-                    var retreat = Cover("Retreat", at - into * 3f, 0.70f, covers);
+                    var advance = Cover("Advance", Safe(at + into * 4f, room, centre, corridorBlocks), 0.85f, covers);
+                    var flank = Cover("Flank", Safe(at + side * (6f * flankSide) + into * 2f, room, centre, corridorBlocks), 0.85f, covers);
+                    var retreat = Cover("Retreat", Safe(at - into * 3f, room, centre, corridorBlocks), 0.70f, covers);
 
                     var controller = warden.GetComponent<WardenGameplayController>();
                     controller.InitializeExternalReferences(player != null ? player.transform : null, director,
@@ -417,6 +438,26 @@ namespace Override.EditorTools
                     log.AppendLine($"  + {warden.name} at {at}");
                 }
             }
+        }
+
+        /// Keeps a Warden or cover point inside its room (3 m from the walls) and out of corridor mouths:
+        /// if it's in a doorway area, it steps towards the room's centre until it isn't.
+        static Vector3 Safe(Vector3 p, Bounds room, Vector3 centre, System.Collections.Generic.List<Bounds> corridorBlocks)
+        {
+            const float wallMargin = 3f;
+            for (int step = 0; step < 40; step++)
+            {
+                p.x = Mathf.Clamp(p.x, room.min.x + wallMargin, room.max.x - wallMargin);
+                p.z = Mathf.Clamp(p.z, room.min.z + wallMargin, room.max.z - wallMargin);
+                bool inDoorway = false;
+                foreach (var b in corridorBlocks)
+                    if (p.x > b.min.x && p.x < b.max.x && p.z > b.min.z && p.z < b.max.z) { inDoorway = true; break; }
+                if (!inDoorway) return p;
+                Vector3 toCentre = new Vector3(centre.x - p.x, 0f, centre.z - p.z);
+                if (toCentre.sqrMagnitude < 1f) return p;
+                p += toCentre.normalized;   // one metre at a time
+            }
+            return p;
         }
 
         static WardenCoverPoint Cover(string name, Vector3 at, float quality, Transform parent)
@@ -442,6 +483,19 @@ namespace Override.EditorTools
                 AssetDatabase.LoadAssetAtPath<UnityEngine.UIElements.StyleSheet>("Assets/UI/StartScreen/StartScreen.uss");
             so.ApplyModifiedPropertiesWithoutUndo();
             log.AppendLine("  + OVERRIDE_GameFlow (pause, game over + respawn, victory)");
+        }
+
+        static void InstallHUD(System.Text.StringBuilder log)
+        {
+            if (Object.FindFirstObjectByType<Override.UI.GameHUD>() != null) { log.AppendLine("  = GameHUD already in the scene"); return; }
+            var go = new GameObject("OVERRIDE_HUD");
+            Undo.RegisterCreatedObjectUndo(go, "Install HUD");
+            var hud = go.AddComponent<Override.UI.GameHUD>();
+            var so = new SerializedObject(hud);
+            so.FindProperty("panelSettings").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<UnityEngine.UIElements.PanelSettings>("Assets/UI/OverridePanelSettings.asset");
+            so.ApplyModifiedPropertiesWithoutUndo();
+            log.AppendLine("  + OVERRIDE_HUD (health, ammo, objectives, alarm, hack bar, prompts)");
         }
 
         static void InstallAudio(System.Text.StringBuilder log)
