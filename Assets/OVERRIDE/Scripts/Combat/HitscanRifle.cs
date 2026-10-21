@@ -35,7 +35,7 @@ namespace Override.Combat
         [SerializeField] float fireRate = 8f;          // shots per second
         [SerializeField] float range = 60f;            // metres
         [SerializeField] int magazineSize = 30;
-        [SerializeField] float reloadTime = 1.4f;      // seconds (GDD 2.0; shortened after playtesting felt sluggish)
+        [SerializeField] float reloadTime = 1.1f;      // seconds (GDD 2.0; shortened after playtesting felt sluggish)
         [SerializeField] float gunshotNoise = 30f;     // metres
 
         [Header("Ammo (starting values)")]

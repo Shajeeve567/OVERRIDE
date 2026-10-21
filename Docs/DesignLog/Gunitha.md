@@ -53,7 +53,7 @@ A CharacterController moves exactly where told, never slides or tips, and handle
 
 | Setting | Value | Source |
 |---|---|---|
-| Rifle | 15 dmg, 8 shots/s, 60 m, 30 + 90 rounds, 1.4 s reload, 30 m noise | GDD (reload was 2.0 s; shortened after playtesting because it felt sluggish) |
+| Rifle | 15 dmg, 8 shots/s, 60 m, 30 + 90 rounds, 1.1 s reload, 30 m noise | GDD (reload was 2.0 s; shortened after playtesting because it felt sluggish) |
 | Spread | 0.5° still, 2.0° moving, 0.2° aiming | Starting values |
 | Recoil | +1°/shot, ±0.3° yaw, recovers 8°/s after 0.15 s | Delay makes sustained fire climb (GDD) |
 | Aim down sights | FOV 60→42°, recoil/move/look ×0.6 | Added from the GDD nice-to-have list |
