@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using Override.Level; 
 
 public class WaypointGraph : MonoBehaviour
 {
@@ -15,52 +16,44 @@ public class WaypointGraph : MonoBehaviour
 
     private void Start()
     {
-        // We still build it on Start so the AI can use it during gameplay
         BuildGraph();
     }
 
-    // This adds a button to the Inspector so you can click it manually
     [ContextMenu("Build Graph Now")]
     public void BuildGraph()
     {
         nodes.Clear();
         edges.Clear();
 
-        // 1. Find all waypoints
-        GameObject[] waypointObjects = GameObject.FindGameObjectsWithTag("Waypoint");
-        
-        if (waypointObjects.Length == 0)
+        // 1. Find all WaypointNode components in the scene (even inactive ones)
+        WaypointNode[] allNodes = FindObjectsByType<WaypointNode>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+
+        if (allNodes.Length == 0)
         {
-            Debug.LogWarning("No objects found with the tag 'Waypoint'! Please tag your spheres.");
+            Debug.LogWarning("No WaypointNode scripts found in the scene!");
             return;
         }
 
-        foreach (GameObject obj in waypointObjects)
+        // 2. Register all nodes
+        foreach (WaypointNode node in allNodes)
         {
-            nodes.Add(obj.transform);
-            edges[obj.transform] = new List<Transform>();
+            nodes.Add(node.transform);
+            edges[node.transform] = new List<Transform>();
         }
 
-        // 2. Connect waypoints
-        foreach (Transform nodeA in nodes)
+        // 3. Build the edges from their manual neighbour lists
+        foreach (WaypointNode node in allNodes)
         {
-            foreach (Transform nodeB in nodes)
+            foreach (WaypointNode neighbour in node.neighbours)
             {
-                if (nodeA == nodeB) continue;
-
-                Vector3 dir = nodeB.position - nodeA.position;
-                float dist = dir.magnitude;
-
-                Debug.DrawRay(nodeA.position, dir.normalized * dist, Color.red, 5f);
-                
-                // Note: For the raycast to work, your wall cube MUST have a Collider!
-                if (!Physics.Raycast(nodeA.position, dir.normalized, dist))
+                if (neighbour != null)
                 {
-                    edges[nodeA].Add(nodeB);
+                    edges[node.transform].Add(neighbour.transform);
                 }
             }
         }
-        Debug.Log($"Waypoint Graph Built: {nodes.Count} nodes connected.");
+        
+        Debug.Log($"Waypoint Graph Built: {nodes.Count} nodes connected manually.");
     }
 
     private void OnDrawGizmos()
