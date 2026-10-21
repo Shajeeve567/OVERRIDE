@@ -12,6 +12,11 @@ namespace Override.Interaction
     {
         [Header("Physics (starting values)")]
         [SerializeField] float mass = 2f;
+        [Tooltip("Slows spinning: a round canister otherwise rolls across the whole room.")]
+        [SerializeField] float angularDamping = 3f;
+        [SerializeField] float linearDamping = 0.3f;
+        [SerializeField] float friction = 0.7f;      // rough metal on concrete
+        [SerializeField] float bounciness = 0.15f;   // a dull clank, not a rubber ball
 
         [Header("Impact noise (GDD)")]
         [SerializeField] float noiseRadius = 15f;
@@ -33,6 +38,16 @@ namespace Override.Interaction
             body = GetComponent<Rigidbody>();
             col = GetComponent<Collider>();
             body.mass = mass;
+            body.angularDamping = angularDamping;
+            body.linearDamping = linearDamping;
+            col.material = new PhysicsMaterial("Canister")
+            {
+                dynamicFriction = friction,
+                staticFriction = friction,
+                bounciness = bounciness,
+                frictionCombine = PhysicsMaterialCombine.Maximum,     // grips even on slippery floors
+                bounceCombine = PhysicsMaterialCombine.Minimum,
+            };
             // Continuous Dynamic: a thrown canister moves ~14 m/s, fast enough to pass through a thin
             // wall between two physics steps with Discrete detection.
             body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
@@ -67,7 +82,7 @@ namespace Override.Interaction
             body.isKinematic = false;
             body.interpolation = RigidbodyInterpolation.Interpolate;
             body.linearVelocity = velocity;
-            body.angularVelocity = Random.insideUnitSphere * 5f;   // a little tumble looks thrown
+            body.angularVelocity = Random.insideUnitSphere * 3f;   // a little tumble looks thrown
 
             // Don't collide with the thrower for a moment, or it bounces off our own capsule.
             if (playerCollider != null)

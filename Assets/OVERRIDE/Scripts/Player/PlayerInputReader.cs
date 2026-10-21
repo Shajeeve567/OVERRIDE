@@ -52,7 +52,8 @@ namespace Override.Player
             aim = new InputAction("Aim", InputActionType.Button, "<Mouse>/rightButton");   // hold to aim down sights
             reload = new InputAction("Reload", InputActionType.Button, "<Keyboard>/r");
             interact = new InputAction("Interact", InputActionType.Button, "<Keyboard>/e");
-            throwAction = new InputAction("Throw", InputActionType.Button, "<Keyboard>/g");
+            throwAction = new InputAction("Throw", InputActionType.Button, "<Mouse>/middleButton");   // wheel click
+            throwAction.AddBinding("<Keyboard>/g");                                                   // or G
             sprint = new InputAction("Sprint", InputActionType.Button, "<Keyboard>/leftShift");
 
             crouch = new InputAction("Crouch", InputActionType.Button, "<Keyboard>/leftCtrl");
