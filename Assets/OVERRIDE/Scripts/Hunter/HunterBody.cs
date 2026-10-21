@@ -80,6 +80,9 @@ namespace Override.Hunter
         Vector3 visualRest;
         float lungeStart = -10f;
 
+        /// Raised on each lunge that hits (audio, effects).
+        public event System.Action Lunged;
+
         public HunterBrain Brain => brain;
         public HunterSettings Settings => settings;
         public float FloorTop => floorTop;
@@ -260,6 +263,7 @@ namespace Override.Hunter
             nextAttack = Time.time + settings.AttackCooldown;
             lungeStart = Time.time;   // the visible dart forward (LateUpdate)
             playerDamageable.TakeDamage(settings.AttackDamage, player.position + Vector3.up, transform.forward);
+            Lunged?.Invoke();
         }
 
         // ---------------------------------------------------------------- move
