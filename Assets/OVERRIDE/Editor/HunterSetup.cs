@@ -35,7 +35,7 @@ namespace Override.EditorTools
             body.useGravity = false;
             var health = root.AddComponent<Health>();
             health.Configure(250f, false);   // GDD 150, raised to 250 to balance aim down sights; disabled on death, never respawns
-            SetAmmoDrop(health);
+            SetAmmoDrop(health, SeekerDropsAmmo);
             var hunter = root.AddComponent<HunterBody>();
             root.AddComponent<HunterDebugView>();
 
@@ -69,18 +69,22 @@ namespace Override.EditorTools
 
         const string AmmoDropPrefab = "Assets/OVERRIDE/Prefabs/AmmoDrop.prefab";
 
-        /// GDD: destroyed units drop ammo. Returns false if the AmmoDrop prefab is missing.
-        static bool SetAmmoDrop(Health health)
+        /// Team decision (21 Oct): no agent drops ammo for now; ammo comes from the crates at each terminal.
+        /// Set to true and run the installer again to bring the Seeker's drop back after play-testing.
+        const bool SeekerDropsAmmo = false;
+
+        /// Sets or clears the ammo dropped on death. Returns false if the AmmoDrop prefab is missing.
+        static bool SetAmmoDrop(Health health, bool on)
         {
-            var drop = AssetDatabase.LoadAssetAtPath<GameObject>(AmmoDropPrefab);
-            if (drop == null) return false;
+            var drop = on ? AssetDatabase.LoadAssetAtPath<GameObject>(AmmoDropPrefab) : null;
+            if (on && drop == null) return false;
             var so = new SerializedObject(health);
             so.FindProperty("dropOnDeath").objectReferenceValue = drop;
             so.ApplyModifiedPropertiesWithoutUndo();
             return true;
         }
 
-        /// Brings an existing Seeker prefab up to date (ammo drop on death). Returns a log line.
+        /// Brings an existing Seeker prefab in line with SeekerDropsAmmo. Returns a log line.
         public static string UpgradePrefab()
         {
             if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) == null) return "  = no Seeker prefab yet";
@@ -89,10 +93,11 @@ namespace Override.EditorTools
             {
                 var health = root.GetComponent<Health>();
                 var so = new SerializedObject(health);
-                if (so.FindProperty("dropOnDeath").objectReferenceValue != null) return "  = Seeker already drops ammo";
-                if (!SetAmmoDrop(health)) return "  ! no " + AmmoDropPrefab + ": Seeker drops nothing";
+                bool drops = so.FindProperty("dropOnDeath").objectReferenceValue != null;
+                if (drops == SeekerDropsAmmo) return drops ? "  = Seeker drops ammo" : "  = Seeker drops no ammo";
+                if (!SetAmmoDrop(health, SeekerDropsAmmo)) return "  ! no " + AmmoDropPrefab + ": Seeker drops nothing";
                 PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
-                return "  + Seeker now drops an AmmoDrop on death";
+                return SeekerDropsAmmo ? "  + Seeker now drops an AmmoDrop on death" : "  - Seeker no longer drops ammo";
             }
             finally { PrefabUtility.UnloadPrefabContents(root); }
         }
