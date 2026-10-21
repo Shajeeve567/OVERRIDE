@@ -3,7 +3,7 @@
 **Roles:** Systems Engineer (SE3032 Graphics & Visualization) and the Hunter / Seeker agent (SE3062 Intelligent Systems).
 **Code:** `Assets/OVERRIDE/Scripts/` (Player, Interaction, Combat, Hunter, Flow, Integration, Core) and the editor tools in `Assets/OVERRIDE/Editor/`.
 
-Values marked **[fill in]** are measurements still to take in Unity.
+Values marked **[fill in]** are still to be added.
 
 ---
 
@@ -38,6 +38,7 @@ A CharacterController moves exactly where told, never slides or tips, and handle
 | Door | 30 kg, HingeJoint spring 300, damper 30, opens 95° | Spring = door returns to its target; damper stops bouncing |
 | Crate | 80 kg, rotation frozen, damping 3, pushed at ≤ 2 m/s | Heavy enough that walking into it doesn't move it |
 | Canister | 2 kg, Continuous Dynamic, throw 14 m/s + 2 m/s up | Fast throw would tunnel through walls with Discrete |
+| Canister damping | angular 3, linear 0.3, friction 0.7, bounce 0.15 | Added after playtesting: a round canister rolled across the whole room |
 | Terminal | 8 s hold (Core 30 s), beep 20 m every 2 s, damage pauses 1 s | GDD |
 
 ### Interaction problems I solved
@@ -101,7 +102,7 @@ The Seeker is **blind**. It keeps a probability for every 2 m cell of where the 
 | Hearing | 1.5 × noise radius, halved through a closed door | GDD |
 | Recall σ / floor | 10 m / 0.15 | Final phase (GDD §7): ARGUS's recall to the Core is applied as wide, weak evidence each tick, so the Seeker drifts to the Core but real noises still win |
 
-**[fill in]** any value changed after testing, and why.
+Values changed after testing are listed under Balance decisions above and in §2–3 (reload 1.1 s, canister damping).
 
 ### A* details
 8-connected; straight step 1 cell, diagonal √2; no corner cutting. **Octile heuristic** h = (max − min) + √2·min (in cells). It equals the cost of the best obstacle-free path, so it never overestimates (**admissible**) and changes by at most one step's cost between neighbours (**consistent**). A* therefore returns a shortest path and closes each cell once. Arrays are reused between searches (generation stamps), so a search allocates nothing.
@@ -126,33 +127,36 @@ The intent label (Patrol / Search / Investigate / Pursue / Attack) only describe
 
 ### Edge cases (GDD §6)
 | Case | Expected | Result |
-|---|---|---|
-| Two noises far apart | Two peaks; picks the bigger, distance-weighted | **[fill in]** |
-| Fake lure (canister) | Goes to impact, drains it, returns to older evidence | **[fill in]** |
-| Player in a vent | Waits at the vent mouth | **[fill in]** |
-| Noise through a closed door | Range halved, σ doubled, no path through the door | **[fill in]** |
-| Cameras offline (Labs done) | Sightings stop changing the heatmap | **[fill in]** |
-| Goal blocked by a crate | Next-best goal used | **[fill in]** |
-| Stuck 2 s | Next cell avoided 3 s, replans | **[fill in]** |
+|All seven play-tested edge cases passed (21 Oct), and the Hunter core has **17 edit-mode unit tests, all passing** (`Assets/Tests/Editor/Hunter/HunterCoreTests.cs`, evidence `07_tests.png`), including contradictory evidence, the vent mouth, a crate-blocked corner and underflow.
+
+---|---|---|
+| Two noises far apart | Two peaks; picks the bigger, distance-weighted | Pass |
+| Fake lure (canister) | Goes to impact, drains it, returns to older evidence | Pass |
+| Player in a vent | Waits at the vent mouth | Pass |
+| Noise through a closed door | Range halved, σ doubled, no path through the door | Pass |
+| Cameras offline (Labs done) | Sightings stop changing the heatmap | Pass |
+| Goal blocked by a crate | Next-best goal used | Pass |
+| Stuck 2 s | Next cell avoided 3 s, replans | Pass |
 | Belief underflow | Reset to uniform | Guard in `BeliefGrid.Normalize` |
 
 ---
 
 ## 5. Optimization (G&V, with evidence in `Docs/Evidence/Gunitha/`)
 
+Measured in Greybox_v2 in the Editor on 21 Oct, with the in-game performance overlay (`` ` ``) and the Unity Profiler.
+
 | What | How | Evidence |
 |---|---|---|
-| Pooled effects | Sparks, bullet holes, tracer and flash created once and reused | GC alloc while firing: **[fill in] B** |
-| Non-allocating queries | `RaycastNonAlloc`, `OverlapCapsuleNonAlloc`, reused buffers | Profiler GC column for my scripts: **[fill in]** |
-| Collision detection | Continuous Dynamic only on the canister (fast); Discrete on doors and crates | Canister doesn't pass through walls |
-| Interpolation | Only the canister, Seeker and sliding doors (things seen moving up close) | — |
+| Rigidbody sleeping | Crates, canisters and doors are never woken every frame | **1** active dynamic body with everything at rest (`01_rest_bodies.png`) |
+| Pooled effects | Sparks, bullet holes, tracer and flash are created once and reused; the HUD caches its text and marker bars | The overlay's whole-frame GC while firing was 13,695 B, but that includes the Editor's own Game-view rendering (3.6 KB/frame) and teammates' per-frame allocations. Per-script figures for `HitscanRifle`, `RifleEffects` and `GameHUD`: **[fill in from the Profiler, sorted by GC Alloc]** (`02_firing_gc.png`) |
+| Non-allocating queries | `RaycastNonAlloc`, `OverlapCapsuleNonAlloc`, `OverlapBoxNonAlloc`, reused buffers | Same Profiler capture |
+| Fixed timestep | Compared 50 Hz and 60 Hz live (overlay keys − and =) | Physics step **0.02 ms** at both (`03a`/`03b`): with props asleep there's almost nothing to simulate. 60 Hz would cost 20% more steps per second (1.2 vs 1.0 ms/s) for no visible gain, so I kept Unity's default **50 Hz** |
+| Collision detection | Continuous Dynamic only on the canister (thrown at 14 m/s); Discrete on doors and crates | `10b_canister_rigidbody.png`; the canister never passes through walls |
+| Interpolation | Only the canister, the Seeker and sliding doors (seen moving up close) | — |
 | Kinematic movers | Sliding doors and the Seeker are kinematic Rigidbodies, not moved static colliders | — |
-| Rigidbody sleeping | Props are never woken every frame | Active dynamic bodies at rest: **[fill in]** |
-| Fixed timestep | 50 Hz vs 60 Hz (` overlay, keys − and =) | Physics step **[fill in] ms** vs **[fill in] ms** |
-| Hunter time-slicing | Decides every 0.25 s, not every frame; 2 m cells, not 1 m (¼ the cells) | Hunter.Tick **[fill in] ms**, A* cells expanded **[fill in]** |
-| Grid baked once | Floor, clearance and links tested at Play start only | Bake time **[fill in] ms** |
-
----
+| Hunter time-slicing | Decides every 0.25 s, not every frame; 2 m cells (a quarter of the cells of 1 m) | **Hunter.Tick 0.92 ms** per decision, about 3.7 ms per second, or about 0.06 ms per frame at 60 fps (`04_hunter_tick.png`). A* expanded **5 cells** on a typical short replan, thanks to the admissible octile heuristic |
+| Hunter allocations | Belief, A* and goal arrays allocated once; only a new path array on each replan (at most 4 per second) | Profiler `Hunter.Tick` GC Alloc: **[fill in]** (`06_profiler_hunter_tick.png`) |
+| Grid baked once | Floor, clearance and neighbour links tested once at Play start | **75 × 73** cells: **2240** player-walkable, **2233** Seeker-walkable, **7** crouch-only; 15,430 / 15,392 links; **baked in 13–15 ms** (`05_grid_bake.png`). The counts are temporarily low: until the Warden prefab's oversized weak-point colliders are fixed, they block cells around each Warden (about 2625 walkable before the Wardens were placed) |
 
 ## 6. Workflow and tools
 Unity 6000.3 (URP, Input System, Profiler, Physics Debugger), C# in VS Code, Git + Git LFS with feature branches (`feature/player-controller`, `feature/interactions`, `feature/rifle`, `feature/hunter-belief-grid`, `feature/game-flow`) and integration branches. Editor tools I wrote do repeatable scene wiring: installer, model fitting, Seeker prefab builder.
