@@ -45,13 +45,16 @@ namespace Override.Motor
         private float beamHideTime;
         private CharacterController playerBody;
 
+        private AudioSource shotAudio;
+        private static AudioClip shotClip;
+
         private void Awake()
         {
             controller = GetComponent<CharacterController>();
             brain = GetComponent<IAgentBrain>();
             visuals = GetComponentInChildren<WispVisuals>(true);
 
-            if (visuals != null)
+            if (isFlying && visuals != null)
             {
                 controller.height = 1.2f;
                 controller.radius = 0.45f;
@@ -59,7 +62,11 @@ namespace Override.Motor
                 controller.skinWidth = 0.04f;
             }
 
-            if (canShoot) CreateBeam();
+            if (canShoot)
+            {
+                EnsureShotAudio();
+                CreateBeam();
+            }
         }
 
         private void CreateBeam()
@@ -77,6 +84,46 @@ namespace Override.Motor
             beam.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             beam.receiveShadows = false;
             beam.enabled = false;
+        }
+
+        private void EnsureShotAudio()
+        {
+            var go = new GameObject("ShotAudio");
+            go.transform.SetParent(transform, false);
+
+            shotAudio = go.AddComponent<AudioSource>();
+            if (shotClip == null) shotClip = CreateShotClip();
+            shotAudio.clip = shotClip;
+            shotAudio.playOnAwake = false;
+            shotAudio.loop = false;
+            shotAudio.spatialBlend = 1f;
+            shotAudio.volume = 0.35f;
+            shotAudio.minDistance = 2f;
+            shotAudio.maxDistance = 25f;
+            shotAudio.rolloffMode = AudioRolloffMode.Linear;
+            shotAudio.dopplerLevel = 0f;
+        }
+
+        private static AudioClip CreateShotClip()
+        {
+            const int sampleRate = 44100;
+            const float duration = 0.12f;
+            int sampleCount = Mathf.RoundToInt(sampleRate * duration);
+            float[] samples = new float[sampleCount];
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                float t = (float)i / sampleRate;
+                float progress = (float)i / sampleCount;
+                float frequency = Mathf.Lerp(900f, 180f, progress);
+                float tone = Mathf.Sin(2f * Mathf.PI * frequency * t) * 0.7f +
+                             Mathf.Sin(2f * Mathf.PI * frequency * 2.01f * t) * 0.2f;
+                samples[i] = tone * (1f - progress) * 0.4f;
+            }
+
+            AudioClip clip = AudioClip.Create("WispShot", sampleCount, 1, sampleRate, false);
+            clip.SetData(samples, 0);
+            return clip;
         }
 
         private void Start()
@@ -194,7 +241,7 @@ namespace Override.Motor
                                 WispHealth health = GetComponent<WispHealth>();
                                 if (health != null)
                                 {
-                                    health.TakeDamage(999f);
+                                    health.Kill();
                                 }
                                 else
                                 {
@@ -283,6 +330,7 @@ namespace Override.Motor
             if (toPlayer.sqrMagnitude < 0.0001f) return;
 
             if (visuals != null) visuals.PlayAttack();
+            if (shotAudio != null && shotAudio.clip != null) shotAudio.PlayOneShot(shotAudio.clip);
 
             Vector3 direction = toPlayer.normalized;
             float distance = toPlayer.magnitude;

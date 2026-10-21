@@ -44,6 +44,13 @@ namespace Override.Motor
             ApplyDamage(amount);
         }
 
+        public void Kill()
+        {
+            if (isDead) return;
+            currentHealth = 0f;
+            Die();
+        }
+
         private void ApplyDamage(float amount)
         {
             if (isDead || amount <= 0f) return;
