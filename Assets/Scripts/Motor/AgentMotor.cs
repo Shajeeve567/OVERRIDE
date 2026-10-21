@@ -12,6 +12,8 @@ namespace Override.Motor
         [SerializeField] private float rotationSpeed = 10f;
         [SerializeField] private float fireInterval = 1f;
         [SerializeField] private float fireDamage = 6f;
+        [SerializeField] private Transform shootOrigin;
+        [SerializeField] private bool canShoot = false;
 
         private IAgentBrain brain;
         private CharacterController controller;
@@ -49,7 +51,7 @@ namespace Override.Motor
 
             AgentCommand command = brain.Tick(currentSnapshot);
 
-            if (command.Fire && Time.time >= nextFireTime)
+            if (canShoot && command.Fire && Time.time >= nextFireTime)
             {
                 nextFireTime = Time.time + fireInterval;
                 ShootPlayer();
@@ -112,7 +114,9 @@ namespace Override.Motor
         {
             if (playerTransform == null) return;
 
-            Vector3 origin = transform.position;
+            Vector3 origin = shootOrigin != null
+                ? shootOrigin.position
+                : transform.position + Vector3.up * 1f;
             Vector3 toPlayer = playerTransform.position - origin;
 
             if (toPlayer.sqrMagnitude < 0.0001f) return;
@@ -124,21 +128,23 @@ namespace Override.Motor
 
             Debug.DrawLine(origin, playerTransform.position, Color.red, 0.1f);
 
-            RaycastHit hit;
-            if (Physics.Raycast(origin, direction, out hit, distance + 0.5f, ~0, QueryTriggerInteraction.Ignore))
+            RaycastHit[] hits = Physics.RaycastAll(origin, direction, distance + 0.5f, ~0, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+            foreach (RaycastHit hit in hits)
             {
-                if (hit.transform.CompareTag("Player"))
+                if (hit.transform.root == transform.root) continue;
+
+                if (!hit.transform.CompareTag("Player")) break;
+
+                IDamageable damageable = hit.transform.GetComponentInParent<IDamageable>();
+                if (damageable != null)
                 {
-                    hit.transform.SendMessage("TakeDamage", fireDamage, SendMessageOptions.DontRequireReceiver);
-
-                    IDamageable damageable = hit.transform.GetComponentInParent<IDamageable>();
-                    if (damageable != null)
-                    {
-                        damageable.TakeDamage(fireDamage, hit.point, -hit.normal);
-                    }
-
-                    Debug.Log("[Wisp] Hit the player for " + fireDamage + " damage!");
+                    damageable.TakeDamage(fireDamage, hit.point, -hit.normal);
                 }
+
+                Debug.Log("[Wisp] Hit the player for " + fireDamage + " damage!");
+                break;
             }
         }
     }
