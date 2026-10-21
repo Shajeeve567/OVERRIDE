@@ -183,6 +183,7 @@ namespace Override.Flow
         {
             var document = gameObject.AddComponent<UIDocument>();
             document.panelSettings = panelSettings;
+            document.sortingOrder = 10;   // above the HUD
             if (panelSettings == null) Debug.LogWarning("[GameFlow] No PanelSettings assigned: screens won't show.");
 
             overlay = document.rootVisualElement;

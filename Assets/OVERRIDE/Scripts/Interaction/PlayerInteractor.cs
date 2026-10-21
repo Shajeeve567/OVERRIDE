@@ -30,6 +30,9 @@ namespace Override.Interaction
         public PlayerCarry Carry { get; private set; }
         public Transform CameraTransform => cameraTransform;
         public IInteractable LookedAt => lookedAt;
+        public bool IsHolding => holding != null;
+        /// The temporary on-screen prompt; the HUD switches it off and shows its own.
+        public bool ShowPrompt { get => showPrompt; set => showPrompt = value; }
 
         void Awake()
         {
