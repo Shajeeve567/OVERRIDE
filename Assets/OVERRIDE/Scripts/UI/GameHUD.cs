@@ -32,7 +32,7 @@ namespace Override.UI
         static readonly Color Red = new Color(0.86f, 0.18f, 0.16f);
         static readonly Color TextColour = new Color(0.86f, 0.9f, 0.92f);
         static readonly Color Dim = new Color(0.55f, 0.6f, 0.64f);
-        static readonly Color PanelColour = new Color(0.08f, 0.1f, 0.12f, 0.75f);
+        static readonly Color PanelColour = new Color(0.05f, 0.06f, 0.08f, 0.88f);   // dark enough to read over bright walls
 
         HitscanRifle rifle;
         Health health;
@@ -43,6 +43,7 @@ namespace Override.UI
         VisualElement healthFill, alarmFill, hackBar, hackFill, damageFlash, spottedFrame, crossTicks, aimDot, marker;
         Label healthText, ammoText, reloadText, prompt, hackText, message, spottedText, finalWave;
         Label[] terminalRows;
+        readonly VisualElement[] markerBars = new VisualElement[2];
 
         int shownHealth = -1, shownMag = -1, shownReserve = -1, shownHackKey = -1;
         int[] shownRowKeys;
@@ -96,7 +97,7 @@ namespace Override.UI
         {
             if (!shot.HitTarget) return;
             Color c = shot.Kill ? Red : shot.WeakPoint ? new Color(1f, 0.85f, 0.2f) : Color.white;
-            foreach (var bar in marker.Children()) bar.style.backgroundColor = c;
+            foreach (var bar in markerBars) bar.style.backgroundColor = c;   // cached array: no allocation per shot
             marker.style.scale = new Scale(Vector3.one * (shot.Kill ? 1.5f : 1f));
             markerUntil = Time.time + (shot.Kill ? 0.4f : 0.15f);
         }
@@ -272,10 +273,10 @@ namespace Override.UI
             marker = new VisualElement { pickingMode = PickingMode.Ignore };
             Pin(marker, left: 0, top: 0, right: 0, bottom: 0);
             reticle.Add(marker);
-            foreach (float angle in new[] { 45f, -45f })
+            for (int k = 0; k < 2; k++)
             {
-                var bar = Tick(marker, 8, 19, 24, 2);
-                bar.style.rotate = new Rotate(Angle.Degrees(angle));
+                markerBars[k] = Tick(marker, 8, 19, 24, 2);
+                markerBars[k].style.rotate = new Rotate(Angle.Degrees(k == 0 ? 45f : -45f));
             }
             marker.style.display = DisplayStyle.None;
             prompt = AddLabel(centre, "", 15, TextColour, true);
@@ -367,6 +368,8 @@ namespace Override.UI
             l.style.fontSize = size;
             l.style.color = colour;
             l.style.letterSpacing = 1;
+            // A hard 1 px shadow keeps text readable over the gun model and bright surfaces.
+            l.style.textShadow = new TextShadow { offset = new Vector2(1f, 1f), blurRadius = 0f, color = new Color(0f, 0f, 0f, 0.9f) };
             if (bold) l.style.unityFontStyleAndWeight = FontStyle.Bold;
             parent.Add(l);
             return l;
