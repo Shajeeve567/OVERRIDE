@@ -6,6 +6,8 @@
 //                                                  Grip and Muzzle markers) replaces the grey GunModel box
 //   OVERRIDE > Models > Dress Terminals In Scene   TerminalVisual on each HackTerminal; placeholder hidden
 //   OVERRIDE > Models > Dress Stand-in Drones      WispVisual on the Director's stand-in drone prefab
+//   OVERRIDE > Models > Dress Seeker               SeekerVisual (Ilzam's Seeker, with its own weak point)
+//                                                  replaces the placeholder orb on the Seeker prefab
 //
 // Each step can be undone (terminals: Cmd+Z) or re-run; it checks whether it's already done.
 
@@ -23,6 +25,8 @@ namespace Override.EditorTools
         const string TerminalVisual = "Assets/_Project/Prefabs/Visuals/TerminalVisual.prefab";
         const string WispVisual = "Assets/_Project/Prefabs/Visuals/WispVisual.prefab";
         const string DronePrefab = "Assets/_StandIns/Prefabs/StandInDrone.prefab";
+        const string SeekerVisual = "Assets/_Project/Prefabs/Visuals/SeekerVisual.prefab";
+        const string SeekerPrefab = "Assets/OVERRIDE/Prefabs/Seeker.prefab";
 
         // ------------------------------------------------------------------ rifle
 
@@ -146,6 +150,46 @@ namespace Override.EditorTools
 
                 PrefabUtility.SaveAsPrefabAsset(root, DronePrefab);
                 Debug.Log("[Models] The Director's stand-in drones now look like Ilzam's Wisp (until Rithish's Wisp replaces them).");
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); }
+        }
+
+        // ------------------------------------------------------------------ Seeker
+
+        [MenuItem("OVERRIDE/Models/Dress Seeker")]
+        public static void DressSeeker()
+        {
+            var visualAsset = AssetDatabase.LoadAssetAtPath<GameObject>(SeekerVisual);
+            if (visualAsset == null) { Debug.LogWarning("[Models] Missing " + SeekerVisual + " (merge Ilzam's branch first)."); return; }
+
+            var root = PrefabUtility.LoadPrefabContents(SeekerPrefab);
+            try
+            {
+                var visualRoot = FindDeep(root.transform, "Visual");
+                if (visualRoot == null) { Debug.LogWarning("[Models] Seeker prefab has no Visual child."); return; }
+                if (FindDeep(visualRoot, "SeekerVisual") != null) { Debug.Log("[Models] Seeker already dressed."); return; }
+
+                // The placeholder shell keeps its SphereCollider (body hits) but stops drawing.
+                // The placeholder core goes entirely: Ilzam's model brings its own weak point.
+                var shell = FindDeep(visualRoot, "Shell");
+                if (shell != null && shell.TryGetComponent(out Renderer shellRenderer)) shellRenderer.enabled = false;
+                var core = FindDeep(visualRoot, "SensorCore");
+                if (core != null) core.gameObject.SetActive(false);
+
+                var visual = (GameObject)PrefabUtility.InstantiatePrefab(visualAsset, root.scene);
+                visual.transform.SetParent(visualRoot, false);
+                visual.transform.localRotation = Quaternion.identity;
+
+                // About the placeholder's size (0.8 m sphere), centred on it.
+                Bounds model = RendererBounds(visual);
+                float largest = Mathf.Max(model.size.x, model.size.y, model.size.z);
+                if (largest > 0.001f) visual.transform.localScale *= 0.95f / largest;
+                model = RendererBounds(visual);
+                visual.transform.position -= model.center - visualRoot.position;
+
+                PrefabUtility.SaveAsPrefabAsset(root, SeekerPrefab);
+                Debug.Log("[Models] Seeker now uses Ilzam's SeekerVisual. Check it faces where it flies (its sensor forward); " +
+                          "rotate Seeker > Visual > SeekerVisual by 180 on Y if it flies backwards.");
             }
             finally { PrefabUtility.UnloadPrefabContents(root); }
         }

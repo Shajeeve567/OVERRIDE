@@ -16,6 +16,7 @@
 //     Ammo crates     one beside each terminal (GDD: "ammo crates at each terminal"), prefab built if missing
 //     Cameras         SecurityCameraSensor on Shajeeve's camera prefab (sightings for the Seeker)
 //     Seeker          one Seeker in Maintenance, built by HunterSetup if the prefab doesn't exist yet
+//     Game flow       pause, death + respawn, victory screens (GameFlow, Shajeeve's UI style)
 //     Debug           NoiseDebugView + ObjectivesOverlay
 //     _STANDINS       removed if present (it would add duplicate health, terminals and doors)
 
@@ -87,6 +88,7 @@ namespace Override.EditorTools
             log.AppendLine(HunterSetup.EnsureCameraSensors());
             log.AppendLine(HunterSetup.UpgradePrefab());
             log.AppendLine(HunterSetup.PlaceInMaintenance());
+            InstallGameFlow(log);
             InstallDebug(log);
 
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
@@ -351,6 +353,21 @@ namespace Override.EditorTools
                 EditorUtility.SetDirty(director);
                 log.AppendLine("  + Director drone prefab = StandInDrone (swap for Rithish's Wisp when ready)");
             }
+        }
+
+        static void InstallGameFlow(System.Text.StringBuilder log)
+        {
+            if (Object.FindFirstObjectByType<Override.Flow.GameFlow>() != null) { log.AppendLine("  = GameFlow already in the scene"); return; }
+            var go = new GameObject("OVERRIDE_GameFlow");
+            Undo.RegisterCreatedObjectUndo(go, "Install game flow");
+            var flow = go.AddComponent<Override.Flow.GameFlow>();
+            var so = new SerializedObject(flow);
+            so.FindProperty("panelSettings").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<UnityEngine.UIElements.PanelSettings>("Assets/UI/OverridePanelSettings.asset");
+            so.FindProperty("styleSheet").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<UnityEngine.UIElements.StyleSheet>("Assets/UI/StartScreen/StartScreen.uss");
+            so.ApplyModifiedPropertiesWithoutUndo();
+            log.AppendLine("  + OVERRIDE_GameFlow (pause, game over + respawn, victory)");
         }
 
         static void InstallDebug(System.Text.StringBuilder log)
