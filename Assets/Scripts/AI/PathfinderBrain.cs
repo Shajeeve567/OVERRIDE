@@ -9,11 +9,15 @@ namespace Override.AI
 {
     public class PathfinderBrain : MonoBehaviour, IAgentBrain, IDirectorDrone
     {
-        private const float AttackRange = 12f;
+        private const float AttackRange = 15f;
+        private const int LineOfSightHitCapacity = 32;
 
         [SerializeField] private bool allowDirectChaseFallback = true;
 
         private WispVisuals wispVisuals;
+        private CharacterController playerController;
+
+        private static readonly RaycastHit[] lineOfSightHits = new RaycastHit[LineOfSightHitCapacity];
 
         private List<Vector3> currentPath = new List<Vector3>();
         private float lastPathTime = 0f;
@@ -28,14 +32,18 @@ namespace Override.AI
 
         public void Launch(Vector3 waypoint, Transform playerTransform)
         {
-            transform.position = waypoint;
-            currentPath.Clear();
-            lastPathTime = -999f;
+            playerController = playerTransform != null
+                ? playerTransform.GetComponent<CharacterController>()
+                : null;
+
+            if (currentPath == null) currentPath = new List<Vector3>();
+            else currentPath.Clear();
+
+            currentPath.Add(waypoint);
+            lastPathTime = Time.time;
 
             if (wispVisuals == null) wispVisuals = GetComponentInChildren<WispVisuals>(true);
             if (wispVisuals != null) wispVisuals.PlaySpawn();
-
-            Debug.Log("[Wisp] Launched from Director! Heading to player.");
         }
 
         private void Awake()
@@ -73,8 +81,9 @@ namespace Override.AI
 
             AgentCommand cmd = new AgentCommand();
             float distToPlayer = Vector3.Distance(transform.position, snapshot.PlayerPosition);
+            bool hasLineOfSight = HasLineOfSight(snapshot.PlayerPosition);
 
-            if (distToPlayer < AttackRange)
+            if (distToPlayer < AttackRange && hasLineOfSight)
             {
                 currentPath.Clear();
                 lastPathTime = -999f;
@@ -88,7 +97,7 @@ namespace Override.AI
                 return cmd;
             }
 
-            Vector3 predictedTarget = GetPredictedTarget(snapshot.PlayerPosition);
+            Vector3 predictedTarget = GetPredictedTarget(snapshot.PlayerPosition, hasLineOfSight);
 
             if (Time.time - lastPathTime > pathRefreshRate)
             {
@@ -140,6 +149,54 @@ namespace Override.AI
                 Debug.DrawLine(previous, node, color);
                 previous = node;
             }
+        }
+
+        private bool HasLineOfSight(Vector3 playerPos)
+        {
+            Vector3 origin = transform.position;
+            Vector3 target = playerController != null
+                ? playerController.bounds.center
+                : playerPos + Vector3.up * 1f;
+            Vector3 toTarget = target - origin;
+            float distance = toTarget.magnitude;
+
+            if (distance < 0.001f) return true;
+
+            int hitCount = Physics.RaycastNonAlloc(
+                origin,
+                toTarget / distance,
+                lineOfSightHits,
+                distance + 0.5f,
+                ~0,
+                QueryTriggerInteraction.Ignore);
+
+            float nearestPlayerHit = float.PositiveInfinity;
+            float nearestBlockerHit = float.PositiveInfinity;
+
+            for (int i = 0; i < hitCount; i++)
+            {
+                RaycastHit hit = lineOfSightHits[i];
+                if (hit.collider == null) continue;
+
+                // The Wisp's own CharacterController and visual colliders are not cover.
+                if (hit.transform.root == transform.root) continue;
+
+                bool isPlayer = hit.transform.CompareTag("Player") ||
+                                hit.transform.root.CompareTag("Player");
+
+                if (isPlayer)
+                {
+                    nearestPlayerHit = Mathf.Min(nearestPlayerHit, hit.distance);
+                    continue;
+                }
+
+                // Other agents are not walls; the shot passes through them.
+                if (hit.collider.GetComponentInParent<IDamageable>() != null) continue;
+
+                nearestBlockerHit = Mathf.Min(nearestBlockerHit, hit.distance);
+            }
+
+            return nearestPlayerHit < nearestBlockerHit;
         }
 
         private List<Vector3> FindPath(Vector3 startPos, Vector3 targetPos, Vector3 playerForward)
@@ -266,7 +323,7 @@ namespace Override.AI
             return Mathf.Clamp01((dot + 1f) / 2f);
         }
 
-        private Vector3 GetPredictedTarget(Vector3 playerPos)
+        private Vector3 GetPredictedTarget(Vector3 playerPos, bool hasLineOfSight)
         {
             if (terminals == null || terminals.Length == 0) return playerPos;
 
@@ -285,7 +342,7 @@ namespace Override.AI
                 }
             }
 
-            if (closestTerminal != null && minDist < 15f)
+            if (!hasLineOfSight && closestTerminal != null && minDist < 15f)
             {
                 return closestTerminal.position;
             }
