@@ -444,11 +444,21 @@ namespace Override.EditorTools
 
         static void InstallDebug(System.Text.StringBuilder log)
         {
-            if (GameObject.Find("OVERRIDE_Debug") != null) return;
+            var existing = GameObject.Find("OVERRIDE_Debug");
+            if (existing != null)
+            {
+                if (existing.GetComponent<PerformanceOverlay>() == null)
+                {
+                    Undo.AddComponent<PerformanceOverlay>(existing);
+                    log.AppendLine("  + PerformanceOverlay on OVERRIDE_Debug (` to show)");
+                }
+                return;
+            }
             var go = new GameObject("OVERRIDE_Debug");
             Undo.RegisterCreatedObjectUndo(go, "Install debug");
             go.AddComponent<NoiseDebugView>();
             go.AddComponent<ObjectivesOverlay>();
+            go.AddComponent<PerformanceOverlay>();
             log.AppendLine("  + OVERRIDE_Debug (noise spheres + objectives overlay)");
         }
     }
