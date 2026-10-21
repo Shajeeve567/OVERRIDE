@@ -30,6 +30,7 @@ using Override.Core;
 using Override.Director;
 using Override.Integration;
 using Override.Interaction;
+using Override.Level;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -42,6 +43,7 @@ namespace Override.EditorTools
         const string CratePrefab = "Assets/OVERRIDE/Props/Prefabs/CrateBarricade.prefab";
         const string HealthStationPrefab = "Assets/OVERRIDE/Props/Prefabs/HealthStation.prefab";
         const string DronePrefab = "Assets/_StandIns/Prefabs/StandInDrone.prefab";
+        const string WispPrefab = "Assets/OVERRIDE/Prefabs/Wisp.prefab";
         const string Mats = "Assets/OVERRIDE/Props/Materials/";
 
         static readonly (string name, ZoneId zone, bool isCore)[] Terminals =
@@ -91,6 +93,7 @@ namespace Override.EditorTools
             InstallCanisters(log);
             InstallDoors(log);
             InstallDirector(log);
+            InstallWispGraph(log);
             log.AppendLine(HunterSetup.EnsureCameraSensors());
             log.AppendLine(HunterSetup.UpgradePrefab());
             log.AppendLine(HunterSetup.PlaceInMaintenance());
@@ -463,13 +466,75 @@ namespace Override.EditorTools
                 Undo.AddComponent<DirectorBridge>(director.gameObject);
                 log.AppendLine("  + DirectorBridge on the Director (GameEvents and rifle hits -> Director)");
             }
-            if (director.dronePrefab == null)
+            // Rithish's Wisp replaces the stand-in drone; the stand-in is only a fallback if the Wisp is missing.
+            var wisp = AssetDatabase.LoadAssetAtPath<GameObject>(WispPrefab);
+            var standIn = AssetDatabase.LoadAssetAtPath<GameObject>(DronePrefab);
+            var wanted = wisp != null ? wisp : standIn;
+            if (director.dronePrefab == null || (wisp != null && director.dronePrefab == standIn))
             {
                 Undo.RecordObject(director, "Set drone prefab");
-                director.dronePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(DronePrefab);
+                director.dronePrefab = wanted;
                 EditorUtility.SetDirty(director);
-                log.AppendLine("  + Director drone prefab = StandInDrone (swap for Rithish's Wisp when ready)");
+                log.AppendLine($"  + Director drone prefab = {wanted.name}");
             }
+            else log.AppendLine($"  = Director drone prefab already {director.dronePrefab.name}");
+        }
+
+        const float NodeLinkRange = 40f;     // longest straight flight between two waypoints
+        const float NodeLinkRadius = 0.5f;   // about the Wisp's width
+
+        /// Rithish's Wisp plans with A* over Shajeeve's WaypointNodes, read by a WaypointGraph object.
+        /// Greybox_v2 has the nodes but no graph, and the nodes have no neighbours, so the Wisp had no
+        /// route and flew straight into the first wall. This adds the graph and links every pair of nodes
+        /// with a clear straight flight between them. Doors and loose props don't block a link: they open
+        /// or get pushed aside at runtime.
+        static void InstallWispGraph(System.Text.StringBuilder log)
+        {
+            if (Object.FindFirstObjectByType<WaypointGraph>() == null)
+            {
+                var go = new GameObject("WaypointGraph");
+                Undo.RegisterCreatedObjectUndo(go, "Add waypoint graph");
+                go.AddComponent<WaypointGraph>();
+                log.AppendLine("  + WaypointGraph (the Wisp's A* reads the WaypointNodes through it)");
+            }
+            else log.AppendLine("  = WaypointGraph already in the scene");
+
+            var nodes = Object.FindObjectsByType<WaypointNode>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (var n in nodes)
+                if (n.neighbours.Count > 0) { log.AppendLine("  = waypoint nodes already linked"); return; }
+
+            int links = 0, isolated = 0;
+            foreach (var n in nodes) Undo.RecordObject(n, "Link waypoints");
+            for (int i = 0; i < nodes.Length; i++)
+                for (int j = i + 1; j < nodes.Length; j++)
+                {
+                    if (!ClearFlight(nodes[i].transform.position, nodes[j].transform.position)) continue;
+                    nodes[i].neighbours.Add(nodes[j]);
+                    nodes[j].neighbours.Add(nodes[i]);
+                    links++;
+                }
+            foreach (var n in nodes)
+            {
+                if (n.neighbours.Count == 0) { isolated++; log.AppendLine($"  ! waypoint {n.name} sees no other node"); }
+                EditorUtility.SetDirty(n);
+            }
+            log.AppendLine($"  + linked {nodes.Length} waypoint nodes with {links} clear flights ({isolated} isolated)");
+        }
+
+        static bool ClearFlight(Vector3 a, Vector3 b)
+        {
+            Vector3 d = b - a;
+            float length = d.magnitude;
+            if (length > NodeLinkRange || length < 0.01f) return false;
+            foreach (var hit in Physics.SphereCastAll(a, NodeLinkRadius, d / length, length, ~0, QueryTriggerInteraction.Ignore))
+            {
+                if (hit.distance <= 0f) continue;                                     // overlapping at the start (the node's own floor)
+                if (hit.collider.attachedRigidbody != null && !hit.collider.attachedRigidbody.isKinematic) continue;   // crates, canisters
+                if (hit.collider.GetComponentInParent<IDoor>() != null || hit.collider.GetComponentInParent<ILockableDoor>() != null) continue;
+                if (hit.collider.GetComponentInParent<Health>() != null) continue;   // the player and the agents
+                return false;
+            }
+            return true;
         }
 
         const string WardenPrefab = "Assets/_Project/Prefabs/WardenGameplay.prefab";

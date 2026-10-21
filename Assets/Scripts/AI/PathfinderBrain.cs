@@ -93,7 +93,9 @@ namespace Override.AI
             if (Time.time - lastPathTime > pathRefreshRate)
             {
                 lastPathTime = Time.time;
-                currentPath = FindPath(transform.position, predictedTarget, snapshot.PlayerForward);
+                // [Integration] FindPath returns null when the graph has no route; keep an empty list instead,
+                // or currentPath.Clear() above throws every frame once the player is in attack range.
+                currentPath = FindPath(transform.position, predictedTarget, snapshot.PlayerForward) ?? new List<Vector3>();
             }
 
             if (currentPath != null && currentPath.Count > 0)
