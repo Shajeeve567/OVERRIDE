@@ -15081,7 +15081,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: de1a27a49d791b84b909b50c2e1a9a60, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Override.Level.WaypointNode
-  neighbours: []
+  neighbours:
+  - {fileID: 1078723762}
 --- !u!1001 &128536347
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -59291,7 +59292,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: de1a27a49d791b84b909b50c2e1a9a60, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Override.Level.WaypointNode
-  neighbours: []
+  neighbours:
+  - {fileID: 1386655676}
 --- !u!1001 &457097641
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -77151,6 +77153,51 @@ Transform:
   - {fileID: 2013993573}
   m_Father: {fileID: 1836832887}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &604001347
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 604001349}
+  - component: {fileID: 604001348}
+  m_Layer: 0
+  m_Name: WaypointGraph
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &604001348
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 604001347}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc2d82324d8363244a808973246e5833, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::WaypointGraph
+  nodes: []
+--- !u!4 &604001349
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 604001347}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &604377571
 GameObject:
   m_ObjectHideFlags: 0
@@ -78083,7 +78130,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6728877037792350208, guid: 75a5c87922e7e41cf8149d0ae5626380, type: 3}
       propertyPath: godMode
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 6976440318490616691, guid: 75a5c87922e7e41cf8149d0ae5626380, type: 3}
       propertyPath: m_Name
@@ -93443,7 +93490,7 @@ MonoBehaviour:
   minDecisionInterval: 3
   maxDecisionInterval: 5
   finalWaveInterval: 1.5
-  dronePrefab: {fileID: 8983876747791295847, guid: aecba838b1953ab419624c75f50d322a, type: 3}
+  dronePrefab: {fileID: 9046111009816651469, guid: d465a5b15744db8438d7d022aa20d78e, type: 3}
   droneBudget: 4
   finalWaveBudget: 6
   launchStagger: 0.6
@@ -130550,7 +130597,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: de1a27a49d791b84b909b50c2e1a9a60, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Override.Level.WaypointNode
-  neighbours: []
+  neighbours:
+  - {fileID: 2080388914}
 --- !u!1 &1033175056
 GameObject:
   m_ObjectHideFlags: 0
@@ -136945,7 +136993,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: de1a27a49d791b84b909b50c2e1a9a60, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Override.Level.WaypointNode
-  neighbours: []
+  neighbours:
+  - {fileID: 127471349}
 --- !u!4 &1078723763
 Transform:
   m_ObjectHideFlags: 0
@@ -173132,7 +173181,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: de1a27a49d791b84b909b50c2e1a9a60, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Override.Level.WaypointNode
-  neighbours: []
+  neighbours:
+  - {fileID: 456933587}
 --- !u!1 &1387658773
 GameObject:
   m_ObjectHideFlags: 0
@@ -265455,7 +265505,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: de1a27a49d791b84b909b50c2e1a9a60, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Override.Level.WaypointNode
-  neighbours: []
+  neighbours:
+  - {fileID: 1032194234}
 --- !u!1 &2080745314
 GameObject:
   m_ObjectHideFlags: 0
@@ -272832,3 +272883,4 @@ SceneRoots:
   - {fileID: 845086379}
   - {fileID: 585866864}
   - {fileID: 309024425}
+  - {fileID: 604001349}
