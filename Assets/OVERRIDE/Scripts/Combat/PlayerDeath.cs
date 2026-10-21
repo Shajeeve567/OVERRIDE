@@ -43,7 +43,7 @@ namespace Override.Combat
         {
             health.ResetHealth();
             controller.InputEnabled = true;
-            if (rifle != null) rifle.enabled = true;
+            if (rifle != null) { rifle.enabled = true; rifle.RestockForRespawn(); }
             FirstPersonController.SetCursorLocked(true);
         }
     }

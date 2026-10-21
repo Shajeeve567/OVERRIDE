@@ -271,6 +271,15 @@ namespace Override.Combat
             ReloadCancelled?.Invoke();
         }
 
+        /// Respawn: a full magazine and at least the starting reserve, so the player is never revived empty.
+        public void RestockForRespawn()
+        {
+            CancelReload();
+            Magazine = magazineSize;
+            Reserve = Mathf.Max(Reserve, startingReserve);
+            AmmoChanged?.Invoke();
+        }
+
         /// Adds reserve ammo (pickups). Returns how many rounds were actually taken.
         public int AddAmmo(int amount)
         {
