@@ -10,6 +10,9 @@ namespace Override.AI
     public class PathfinderBrain : MonoBehaviour, IAgentBrain, IDirectorDrone
     {
         private const float AttackRange = 15f;
+        private const float VisionRange = 25f;
+        private const float VisionHalfAngle = 60f;
+        private const float HearingRange = 10f;
         private const float BayExitRadius = 1.5f;
         private const float DirectChaseRadius = 0.45f;
         private const float LostSightToAmbushDelay = 2f;
@@ -33,7 +36,7 @@ namespace Override.AI
         private float pathRefreshRate = 0.5f;
         private Transform[] terminals;
 
-        private Vector3 lastSeenPlayerPosition;
+        private Vector3 lastKnownPlayerPosition;
         private Vector3 currentTarget;
         private float timeSinceLosLost;
         private float lastTargetChangeTime;
@@ -51,8 +54,8 @@ namespace Override.AI
                 ? playerTransform.GetComponent<CharacterController>()
                 : null;
 
-            lastSeenPlayerPosition = playerTransform != null ? playerTransform.position : waypoint;
-            currentTarget = lastSeenPlayerPosition;
+            lastKnownPlayerPosition = playerTransform != null ? playerTransform.position : waypoint;
+            currentTarget = lastKnownPlayerPosition;
             timeSinceLosLost = 0f;
             lastTargetChangeTime = Time.time;
             isTerminalAmbush = false;
@@ -72,8 +75,18 @@ namespace Override.AI
         private void Awake()
         {
             wispVisuals = GetComponentInChildren<WispVisuals>(true);
-            lastSeenPlayerPosition = transform.position;
+            lastKnownPlayerPosition = transform.position;
             currentTarget = transform.position;
+        }
+
+        private void OnEnable()
+        {
+            NoiseBus.Emitted += OnNoiseEmitted;
+        }
+
+        private void OnDisable()
+        {
+            NoiseBus.Emitted -= OnNoiseEmitted;
         }
 
         private void Start()
@@ -85,6 +98,16 @@ namespace Override.AI
             {
                 terminals[i] = termObjs[i].transform;
             }
+        }
+
+        private void OnNoiseEmitted(NoiseEvent noise)
+        {
+            if ((noise.Position - transform.position).sqrMagnitude > HearingRange * HearingRange) return;
+
+            lastKnownPlayerPosition = noise.Position;
+            isTerminalAmbush = false;
+            lastTargetChangeTime = Time.time;
+            lastPathTime = -999f;
         }
 
         public AgentCommand Tick(WorldSnapshot snapshot)
@@ -133,8 +156,9 @@ namespace Override.AI
             AgentCommand cmd = new AgentCommand();
             float distToPlayer = Vector3.Distance(transform.position, snapshot.PlayerPosition);
             bool hasLineOfSight = HasLineOfSight(snapshot.PlayerPosition);
+            bool canSeePlayer = CanSeePlayer(snapshot.PlayerPosition);
 
-            UpdateTargetKnowledge(snapshot.PlayerPosition, hasLineOfSight);
+            UpdateTargetKnowledge(snapshot.PlayerPosition, canSeePlayer);
 
             if (distToPlayer < AttackRange && hasLineOfSight)
             {
@@ -152,7 +176,7 @@ namespace Override.AI
 
             bool wantsTerminalAmbush = ShouldUseTerminalAmbush(
                 snapshot.PlayerPosition,
-                hasLineOfSight,
+                canSeePlayer,
                 out Transform ambushTerminal);
 
             if (wantsTerminalAmbush != isTerminalAmbush &&
@@ -169,7 +193,7 @@ namespace Override.AI
             }
             else
             {
-                currentTarget = lastSeenPlayerPosition;
+                currentTarget = lastKnownPlayerPosition;
             }
 
             if (Time.time - lastPathTime > pathRefreshRate)
@@ -188,8 +212,8 @@ namespace Override.AI
             else
             {
                 cmd.Path = allowDirectChaseFallback &&
-                           HasClearDirectPathTo(lastSeenPlayerPosition + Vector3.up * 1f)
-                    ? new Vector3[] { lastSeenPlayerPosition }
+                           HasClearDirectPathTo(lastKnownPlayerPosition + Vector3.up * 1f)
+                    ? new Vector3[] { lastKnownPlayerPosition }
                     : new Vector3[] { transform.position };
             }
 
@@ -224,6 +248,27 @@ namespace Override.AI
                 Debug.DrawLine(previous, node, color);
                 previous = node;
             }
+        }
+
+        private bool CanSeePlayer(Vector3 playerPos)
+        {
+            Vector3 target = playerController != null
+                ? playerController.bounds.center
+                : playerPos + Vector3.up * 1f;
+            Vector3 toTarget = target - transform.position;
+
+            if (toTarget.sqrMagnitude > VisionRange * VisionRange ||
+                toTarget.sqrMagnitude < 0.0001f)
+            {
+                return false;
+            }
+
+            if (Vector3.Angle(transform.forward, toTarget) > VisionHalfAngle)
+            {
+                return false;
+            }
+
+            return HasLineOfSight(playerPos);
         }
 
         private bool HasLineOfSight(Vector3 playerPos)
@@ -439,11 +484,11 @@ namespace Override.AI
             return Mathf.Clamp01((dot + 1f) / 2f);
         }
 
-        private void UpdateTargetKnowledge(Vector3 playerPos, bool hasLineOfSight)
+        private void UpdateTargetKnowledge(Vector3 playerPos, bool canSeePlayer)
         {
-            if (hasLineOfSight)
+            if (canSeePlayer)
             {
-                lastSeenPlayerPosition = playerPos;
+                lastKnownPlayerPosition = playerPos;
                 timeSinceLosLost = 0f;
             }
             else
@@ -454,12 +499,12 @@ namespace Override.AI
 
         private bool ShouldUseTerminalAmbush(
             Vector3 playerPos,
-            bool hasLineOfSight,
+            bool canSeePlayer,
             out Transform closestTerminal)
         {
             closestTerminal = null;
 
-            if (hasLineOfSight || timeSinceLosLost < LostSightToAmbushDelay) return false;
+            if (canSeePlayer || timeSinceLosLost < LostSightToAmbushDelay) return false;
 
             closestTerminal = GetClosestTerminal(playerPos);
             return closestTerminal != null &&
