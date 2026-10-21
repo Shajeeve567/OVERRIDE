@@ -298,6 +298,13 @@ namespace Override.Director
             nextDecision = Time.time;
         }
 
+        /// Removes every drone currently alive (GDD respawn rule: "living Wisps are cleared").
+        public void ClearDrones()
+        {
+            foreach (var d in drones) if (d != null) Destroy(d);
+            drones.Clear();
+        }
+
         /// The Core override finished: ARGUS is gone. Drones drop, doors open, the Director stops.
         void Defeat()
         {
