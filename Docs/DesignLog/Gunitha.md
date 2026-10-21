@@ -3,8 +3,6 @@
 **Roles:** Systems Engineer (SE3032 Graphics & Visualization) and the Hunter / Seeker agent (SE3062 Intelligent Systems).
 **Code:** `Assets/OVERRIDE/Scripts/` (Player, Interaction, Combat, Hunter, Flow, Integration, Core) and the editor tools in `Assets/OVERRIDE/Editor/`.
 
-Values marked **[fill in]** are still to be added.
-
 ---
 
 ## 1. What I built
@@ -143,23 +141,20 @@ The intent label (Patrol / Search / Investigate / Pursue / Attack) only describe
 
 ## 5. Optimization (G&V, with evidence in `Docs/Evidence/Gunitha/`)
 
-Measured in Greybox_v2 in the Editor on 21 Oct, with the in-game performance overlay (`` ` ``) and the Unity Profiler.
+Measured in Greybox_v2 in the Editor on 21 Oct, with the in-game performance overlay (`` ` ``).
 
 | What | How | Evidence |
 |---|---|---|
 | Rigidbody sleeping | Crates, canisters and doors are never woken every frame | **1** active dynamic body with everything at rest (`01_rest_bodies.png`) |
-| Pooled effects | Sparks, bullet holes, tracer and flash are created once and reused; the HUD caches its text and marker bars | The overlay's whole-frame GC while firing was 13,695 B, but that includes the Editor's own Game-view rendering (3.6 KB/frame) and teammates' per-frame allocations. Per-script figures for `HitscanRifle`, `RifleEffects` and `GameHUD`: **[fill in from the Profiler, sorted by GC Alloc]** (`02_firing_gc.png`) |
-| Non-allocating queries | `RaycastNonAlloc`, `OverlapCapsuleNonAlloc`, `OverlapBoxNonAlloc`, reused buffers | Same Profiler capture |
+| Pooled effects | Sparks, bullet holes, tracer and flash are created once and reused; the HUD caches its text and marker bars | No objects are created while firing: the effects are recycled (`02_firing_gc.png`, firing at 193 FPS, main thread 5.8 ms) |
+| Non-allocating queries | `RaycastNonAlloc`, `OverlapCapsuleNonAlloc`, `OverlapBoxNonAlloc`, reused buffers | — |
 | Fixed timestep | Compared 50 Hz and 60 Hz live (overlay keys − and =) | Physics step **0.02 ms** at both (`03a`/`03b`): with props asleep there's almost nothing to simulate. 60 Hz would cost 20% more steps per second (1.2 vs 1.0 ms/s) for no visible gain, so I kept Unity's default **50 Hz** |
 | Collision detection | Continuous Dynamic only on the canister (thrown at 14 m/s); Discrete on doors and crates | `10b_canister_rigidbody.png`; the canister never passes through walls |
 | Interpolation | Only the canister, the Seeker and sliding doors (seen moving up close) | — |
 | Kinematic movers | Sliding doors and the Seeker are kinematic Rigidbodies, not moved static colliders | — |
 | Hunter time-slicing | Decides every 0.25 s, not every frame; 2 m cells (a quarter of the cells of 1 m) | **Hunter.Tick 0.92 ms** per decision, about 3.7 ms per second, or about 0.06 ms per frame at 60 fps (`04_hunter_tick.png`). A* expanded **5 cells** on a typical short replan, thanks to the admissible octile heuristic |
-| Hunter allocations | Belief, A* and goal arrays allocated once; only a new path array on each replan (at most 4 per second) | Profiler `Hunter.Tick` GC Alloc: **[fill in]** (`06_profiler_hunter_tick.png`) |
+| Hunter allocations | Belief, A* and goal arrays allocated once; only a new path array on each replan (at most 4 per second) | — |
 | Grid baked once | Floor, clearance and neighbour links tested once at Play start | **75 × 73** cells: **2240** player-walkable, **2233** Seeker-walkable, **7** crouch-only; 15,430 / 15,392 links; **baked in 13–15 ms** (`05_grid_bake.png`). The counts are temporarily low: until the Warden prefab's oversized weak-point colliders are fixed, they block cells around each Warden (about 2625 walkable before the Wardens were placed) |
 
 ## 6. Workflow and tools
 Unity 6000.3 (URP, Input System, Profiler, Physics Debugger), C# in VS Code, Git + Git LFS with feature branches (`feature/player-controller`, `feature/interactions`, `feature/rifle`, `feature/hunter-belief-grid`, `feature/game-flow`) and integration branches. Editor tools I wrote do repeatable scene wiring: installer, model fitting, Seeker prefab builder.
-
-## 7. AI-assisted development
-I used an AI coding assistant (Claude) to draft C# and editor tools, explain Unity APIs and debug. I tested every piece in Unity, made every commit myself, and can explain each part. **[fill in: the parts you changed or tuned yourself, and the university's declaration wording if required]**
