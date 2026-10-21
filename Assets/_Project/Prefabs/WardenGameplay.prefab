@@ -163,7 +163,7 @@ MonoBehaviour:
   _fieldOfView: 100
   _obstacleLayers:
     serializedVersion: 2
-    m_Bits: 512
+    m_Bits: 513
   _checkInterval: 0.2
 --- !u!143 &6616547432096836594
 CharacterController:
@@ -223,11 +223,11 @@ MonoBehaviour:
   _listener: {fileID: 4208284539692385945}
   _hearingRange: 15
   _noiseKindMask: -1
-  _sensitivityMultiplier: 1
+  _sensitivityMultiplier: 2
   _obstacleLayers:
     serializedVersion: 2
-    m_Bits: 512
-  _obstructedRangeMultiplier: 0.5
+    m_Bits: 513
+  _obstructedRangeMultiplier: 0.65
 --- !u!114 &3595697395351987833
 MonoBehaviour:
   m_ObjectHideFlags: 0

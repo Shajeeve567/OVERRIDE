@@ -261,6 +261,38 @@ namespace Override.WardenGameplay.Tests
         }
 
         [Test]
+        public void NearbyVisiblePlayer_WhenTerritorialPursuitOwnsMovement_StillReloadsEmptyMagazine()
+        {
+            GameObject warden = CreateObject("Warden");
+            GameObject player = CreateObject("Player");
+            player.transform.position = new Vector3(0f, 0f, 8f);
+
+            Component vision = warden.AddComponent(_visionType);
+            Component weapon = warden.AddComponent(_weaponType);
+            Component health = warden.AddComponent(_healthType);
+            Component controller = warden.AddComponent(_controllerType);
+            Set(vision, "Target", player.transform);
+            Set(vision, "Range", 30f);
+            Set(vision, "FieldOfView", 120f);
+            Set(vision, "ObstacleLayers", (LayerMask)0);
+            Invoke(weapon, "Awake");
+            Invoke(health, "Configure", 100f, false);
+            Invoke(controller, "Awake");
+
+            FieldInfo ammoField = _weaponType.GetField("_ammo", BindingFlags.Instance | BindingFlags.NonPublic);
+            ammoField.SetValue(weapon, 0);
+            _controllerType.GetMethod("Configure", BindingFlags.Instance | BindingFlags.Public).Invoke(
+                controller,
+                new object[] { vision, null, weapon, health, player.transform, null,
+                    null, null, null, null });
+            Assert.That(Invoke<bool>(vision, "CheckVisibilityNow"), Is.True);
+
+            InvokeControllerTick(controller);
+
+            Assert.That(Read<bool>(weapon, "IsReloading"), Is.True);
+        }
+
+        [Test]
         public void WardenDeath_CancelsWeaponActionsImmediately()
         {
             GameObject warden = CreateObject("Warden");
@@ -339,6 +371,166 @@ namespace Override.WardenGameplay.Tests
             float angleAfter = Vector3.Angle(warden.transform.forward, Vector3.right);
             Assert.That(angleAfter, Is.LessThan(90f));
             Assert.That(warden.transform.forward.x, Is.GreaterThan(0.1f));
+        }
+
+        [Test]
+        public void RecentClearFootstep_ProducesTetheredInvestigationMovement()
+        {
+            GameObject warden = CreateObject("Warden");
+            GameObject player = CreateObject("Player");
+            player.transform.position = new Vector3(0f, 0f, -20f);
+
+            Component vision = warden.AddComponent(_visionType);
+            Component hearing = warden.AddComponent(_hearingType);
+            Component weapon = warden.AddComponent(_weaponType);
+            Component health = warden.AddComponent(_healthType);
+            Component controller = warden.AddComponent(_controllerType);
+
+            Set(vision, "Target", player.transform);
+            Set(vision, "Range", 30f);
+            Set(vision, "FieldOfView", 60f);
+            Set(hearing, "HearingRange", 30f);
+            Set(hearing, "ObstacleLayers", (LayerMask)0);
+            Invoke(hearing, "Awake");
+            Invoke(weapon, "Awake");
+            Invoke(health, "Configure", 100f, false);
+            Invoke(controller, "Awake");
+            _controllerType.GetMethod("Configure", BindingFlags.Instance | BindingFlags.Public).Invoke(
+                controller, new object[] { vision, hearing, weapon, health, player.transform, null,
+                    null, null, null, null });
+            Assert.That(Invoke<bool>(vision, "CheckVisibilityNow"), Is.False);
+
+            Type noiseEventType = FindType("Override.Core.NoiseEvent");
+            Type noiseKindType = FindType("Override.Core.NoiseKind");
+            object footstep = Enum.Parse(noiseKindType, "Footstep");
+            object noise = Activator.CreateInstance(noiseEventType,
+                new Vector3(20f, 0f, 0f), 30f, footstep, Time.time);
+            Assert.That(Invoke<bool>(hearing, "ProcessNoise", noise), Is.True);
+
+            Type snapshotType = FindType("Override.Core.WorldSnapshot");
+            object command = _controllerType.GetMethod("Tick", BindingFlags.Instance | BindingFlags.Public)
+                .Invoke(controller, new[] { Activator.CreateInstance(snapshotType) });
+            Vector3[] path = (Vector3[])command.GetType().GetField("Path").GetValue(command);
+
+            Assert.That(Read<bool>(controller, "IsInvestigatingNoise"), Is.True);
+            Assert.That(path, Is.Not.Null.And.Length.EqualTo(1));
+            Assert.That(path[0].x, Is.GreaterThan(0f));
+            Assert.That(Vector3.Distance(warden.transform.position, path[0]), Is.LessThanOrEqualTo(6.01f));
+            Assert.That(Vector3.Distance(path[0], new Vector3(20f, 0f, 0f)), Is.LessThan(20f));
+        }
+
+        [Test]
+        public void NearbyVisiblePlayer_WhenOutsideGuardActivationRadius_IsChasedTowardLeash()
+        {
+            GameObject warden = CreateObject("Warden");
+            GameObject player = CreateObject("Player");
+            warden.transform.position = new Vector3(0f, 0f, 8f);
+            player.transform.position = new Vector3(0f, 0f, 20f);
+            Component guardCover = CreateComponent("Guard Cover", _coverType);
+            guardCover.transform.position = Vector3.zero;
+
+            Component vision = warden.AddComponent(_visionType);
+            Component controller = warden.AddComponent(_controllerType);
+            Set(vision, "Target", player.transform);
+            Set(vision, "Range", 30f);
+            Set(vision, "FieldOfView", 120f);
+            Set(vision, "ObstacleLayers", (LayerMask)0);
+            Invoke(controller, "Awake");
+            _controllerType.GetMethod("Configure", BindingFlags.Instance | BindingFlags.Public).Invoke(
+                controller,
+                new object[] { vision, null, null, null, player.transform, null,
+                    guardCover, null, null, null });
+            Assert.That(Invoke<bool>(vision, "CheckVisibilityNow"), Is.True);
+
+            object command = InvokeControllerTick(controller);
+            Vector3[] path = (Vector3[])command.GetType().GetField("Path").GetValue(command);
+
+            Assert.That(Read<bool>(controller, "IsPursuing"), Is.True);
+            Assert.That(path, Is.Not.Null.And.Length.EqualTo(1));
+            Assert.That(path[0].z, Is.GreaterThan(warden.transform.position.z));
+            Assert.That(Vector3.Distance(Vector3.zero, path[0]), Is.LessThanOrEqualTo(14.01f));
+            Assert.That(Vector3.Distance(path[0], player.transform.position), Is.LessThan(12f));
+        }
+
+        [Test]
+        public void VisiblePlayerOutsideTerritory_WhenWardenLeftPost_ReturnsToGuard()
+        {
+            GameObject warden = CreateObject("Warden");
+            GameObject player = CreateObject("Player");
+            Component guardCover = CreateComponent("Guard Cover", _coverType);
+            guardCover.transform.position = Vector3.zero;
+            warden.transform.position = new Vector3(0f, 0f, 10f);
+            player.transform.position = new Vector3(0f, 0f, 30f);
+
+            Component vision = warden.AddComponent(_visionType);
+            Component controller = warden.AddComponent(_controllerType);
+            Set(vision, "Target", player.transform);
+            Set(vision, "Range", 40f);
+            Set(vision, "FieldOfView", 120f);
+            Set(vision, "ObstacleLayers", (LayerMask)0);
+            Invoke(controller, "Awake");
+            _controllerType.GetMethod("Configure", BindingFlags.Instance | BindingFlags.Public).Invoke(
+                controller,
+                new object[] { vision, null, null, null, player.transform, null,
+                    guardCover, null, null, null });
+            Assert.That(Invoke<bool>(vision, "CheckVisibilityNow"), Is.True);
+
+            object command = InvokeControllerTick(controller);
+            Vector3[] path = (Vector3[])command.GetType().GetField("Path").GetValue(command);
+
+            Assert.That(Read<bool>(controller, "IsReturningToGuard"), Is.True);
+            Assert.That(path, Is.Not.Null.And.Length.EqualTo(1));
+            Assert.That(path[0], Is.EqualTo(Vector3.zero));
+        }
+
+        [Test]
+        public void LostVisualAtCloseRange_MovesTowardLastSeenPositionNotBackwards()
+        {
+            GameObject warden = CreateObject("Warden");
+            GameObject player = CreateObject("Player");
+            player.transform.position = new Vector3(0f, 0f, 5f);
+
+            Component vision = warden.AddComponent(_visionType);
+            Component controller = warden.AddComponent(_controllerType);
+            Set(vision, "Target", player.transform);
+            Set(vision, "Range", 30f);
+            Set(vision, "FieldOfView", 120f);
+            Set(vision, "ObstacleLayers", (LayerMask)0);
+            Invoke(controller, "Awake");
+            _controllerType.GetMethod("Configure", BindingFlags.Instance | BindingFlags.Public).Invoke(
+                controller,
+                new object[] { vision, null, null, null, player.transform, null,
+                    null, null, null, null });
+            Assert.That(Invoke<bool>(vision, "CheckVisibilityNow"), Is.True);
+            Invoke<WardenDecisionState>(controller, "BuildDecisionStateNow");
+
+            player.SetActive(false);
+            Assert.That(Invoke<bool>(vision, "CheckVisibilityNow"), Is.False);
+            object command = InvokeControllerTick(controller);
+            Vector3[] path = (Vector3[])command.GetType().GetField("Path").GetValue(command);
+
+            Assert.That(path, Is.Not.Null.And.Length.EqualTo(1));
+            Assert.That(path[0].z, Is.GreaterThan(warden.transform.position.z));
+            Assert.That(path[0], Is.EqualTo(new Vector3(0f, 0f, 5f)));
+        }
+
+        [Test]
+        public void PeekAndFire_DoesNotCancelCommittedCoverMovement()
+        {
+            GameObject warden = CreateObject("Warden");
+            Component destination = CreateComponent("Destination", _coverType);
+            destination.transform.position = new Vector3(5f, 0f, 0f);
+            Component controller = warden.AddComponent(_controllerType);
+            Invoke(controller, "Awake");
+
+            Invoke(controller, "MoveToCover", destination);
+            Invoke(controller, "ApplyDecision", WardenAction.PeekAndFire);
+
+            FieldInfo commandField = _controllerType.GetField("_command", BindingFlags.Instance | BindingFlags.NonPublic);
+            object command = commandField.GetValue(controller);
+            Vector3[] path = (Vector3[])command.GetType().GetField("Path").GetValue(command);
+            Assert.That(path, Is.Not.Null.And.Length.EqualTo(1));
+            Assert.That(path[0], Is.EqualTo(destination.transform.position));
         }
 
         [Test]
@@ -477,6 +669,13 @@ namespace Override.WardenGameplay.Tests
         private Component CreateComponent(string name, Type type)
         {
             return CreateObject(name).AddComponent(type);
+        }
+
+        private object InvokeControllerTick(Component controller)
+        {
+            Type snapshotType = FindType("Override.Core.WorldSnapshot");
+            return _controllerType.GetMethod("Tick", BindingFlags.Instance | BindingFlags.Public)
+                .Invoke(controller, new[] { Activator.CreateInstance(snapshotType) });
         }
 
         private GameObject CreateObject(string name)

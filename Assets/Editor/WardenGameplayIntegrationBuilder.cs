@@ -194,8 +194,10 @@ public static class WardenGameplayIntegrationBuilder
             WardenVisualReferences references = portable.GetComponentInChildren<WardenVisualReferences>(true);
             WardenWeakPointColliderUtility.Configure(portable);
             vision.Target = null;
+            vision.ObstacleLayers = vision.ObstacleLayers.value | (1 << 0);
             hearing.HearingRange = 15f;
             hearing.SensitivityMultiplier = 1f;
+            hearing.ObstacleLayers = vision.ObstacleLayers;
             hearing.ObstructedRangeMultiplier = 0.5f;
             health.Configure(200f, false);
 
