@@ -13,6 +13,7 @@ using Object = UnityEngine.Object;
 public static class WardenGameplayIntegrationBuilder
 {
     public const string ScenePath = "Assets/Scenes/WardenGameplayIntegrationTest.unity";
+    public const string PrefabPath = "Assets/_Project/Prefabs/WardenGameplay.prefab";
     private const string SourceScenePath = "Assets/Scenes/WardenArgusIntegrationTest.unity";
     private const string RealPlayerPrefabPath = "Assets/OVERRIDE/Prefabs/Player.prefab";
 
@@ -32,12 +33,9 @@ public static class WardenGameplayIntegrationBuilder
 
         try
         {
-            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-            if (AssetDatabase.LoadAssetAtPath<SceneAsset>(ScenePath) != null)
-                AssetDatabase.DeleteAsset(ScenePath);
-            if (!AssetDatabase.CopyAsset(SourceScenePath, ScenePath))
+            Scene sourceScene = EditorSceneManager.OpenScene(SourceScenePath, OpenSceneMode.Single);
+            if (!EditorSceneManager.SaveScene(sourceScene, ScenePath, true))
                 throw new InvalidOperationException("Could not copy scene to " + ScenePath);
-
             Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
             BuildGameplayObjects(scene);
             ValidateScene(scene);
@@ -172,9 +170,87 @@ public static class WardenGameplayIntegrationBuilder
         EditorUtility.SetDirty(warden);
         EditorUtility.SetDirty(controller);
 
-        const string prefabPath = "Assets/_Project/Prefabs/WardenGameplay.prefab";
-        PrefabUtility.SaveAsPrefabAsset(warden, prefabPath);
-        Debug.Log("[Warden Gameplay] Exported standalone gameplay prefab: " + prefabPath);
+        ExportPortablePrefab(warden);
+    }
+
+    private static void ExportPortablePrefab(GameObject sceneWarden)
+    {
+        GameObject portable = Object.Instantiate(sceneWarden);
+        portable.name = "WardenGameplay";
+        portable.transform.SetParent(null, false);
+        portable.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+
+        try
+        {
+            VisionSensor vision = portable.GetComponent<VisionSensor>();
+            HearingSensor hearing = portable.GetComponent<HearingSensor>();
+            WardenWeapon weapon = portable.GetComponent<WardenWeapon>();
+            Health health = portable.GetComponent<Health>();
+            WardenGameplayController controller = portable.GetComponent<WardenGameplayController>();
+
+            if (vision == null || hearing == null || weapon == null || health == null || controller == null)
+                throw new InvalidOperationException("Portable Warden clone is missing required components.");
+
+            WardenVisualReferences references = portable.GetComponentInChildren<WardenVisualReferences>(true);
+            vision.Target = null;
+            hearing.HearingRange = 15f;
+            hearing.SensitivityMultiplier = 1f;
+            hearing.ObstructedRangeMultiplier = 0.5f;
+            health.Configure(200f, false);
+
+            SerializedObject healthData = new SerializedObject(health);
+            healthData.FindProperty("maxHealth").floatValue = 200f;
+            healthData.FindProperty("disableOnDeath").boolValue = true;
+            healthData.ApplyModifiedPropertiesWithoutUndo();
+
+            controller.Configure(
+                vision, hearing, weapon, health, null, null,
+                null, null, null, null);
+
+            if (references != null && references.Muzzle != null)
+                weapon.Configure(references.Muzzle, ~0);
+
+            GameObject saved = PrefabUtility.SaveAsPrefabAsset(portable, PrefabPath, out bool success);
+            if (!success || saved == null)
+                throw new InvalidOperationException("Could not save portable Warden prefab: " + PrefabPath);
+        }
+        finally
+        {
+            Object.DestroyImmediate(portable);
+        }
+
+        ValidatePrefab();
+        Debug.Log("[Warden Gameplay] Exported and validated portable prefab: " + PrefabPath);
+    }
+
+    private static void ValidatePrefab()
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+        if (prefab == null)
+            throw new InvalidOperationException("Missing exported Warden prefab: " + PrefabPath);
+
+        WardenGameplayController controller = prefab.GetComponent<WardenGameplayController>();
+        VisionSensor vision = prefab.GetComponent<VisionSensor>();
+        HearingSensor hearing = prefab.GetComponent<HearingSensor>();
+        WardenWeapon weapon = prefab.GetComponent<WardenWeapon>();
+        Health health = prefab.GetComponent<Health>();
+        WardenVisualReferences references = prefab.GetComponentInChildren<WardenVisualReferences>(true);
+
+        if (controller == null || vision == null || hearing == null || weapon == null || health == null)
+            throw new InvalidOperationException("Exported Warden prefab is missing required gameplay components.");
+        if (controller.PlayerTarget != null || controller.Director != null ||
+            controller.CurrentCover != null || controller.AdvanceCover != null ||
+            controller.FlankCover != null || controller.RetreatCover != null || vision.Target != null)
+        {
+            throw new InvalidOperationException("Exported Warden prefab retained scene-owned references.");
+        }
+        if (references == null || references.Eye == null || references.Muzzle == null ||
+            vision.Eye == null || weapon.Muzzle == null)
+        {
+            throw new InvalidOperationException("Exported Warden prefab lost an internal eye or muzzle reference.");
+        }
+        if (!Mathf.Approximately(health.Max, 200f) || !Mathf.Approximately(hearing.HearingRange, 15f))
+            throw new InvalidOperationException("Exported Warden prefab contains integration-test balance values.");
     }
 
     private static WardenCoverPoint CreateCoverPoint(

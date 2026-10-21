@@ -26667,7 +26667,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 532159442c30dd74ea9a4e6487ca7264, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WardenCoverPoint
-  _quality: 0.9
+  _quality: 0.7
   _coverAvailable: 1
   _pathAvailable: 1
 --- !u!1001 &215497375
@@ -108713,7 +108713,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 532159442c30dd74ea9a4e6487ca7264, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WardenCoverPoint
-  _quality: 0.75
+  _quality: 0.85
   _coverAvailable: 1
   _pathAvailable: 1
 --- !u!1001 &854677329
@@ -110745,7 +110745,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 532159442c30dd74ea9a4e6487ca7264, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WardenCoverPoint
-  _quality: 0.8
+  _quality: 0.85
   _coverAvailable: 1
   _pathAvailable: 1
 --- !u!4 &871809738 stripped
@@ -147104,7 +147104,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 532159442c30dd74ea9a4e6487ca7264, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WardenCoverPoint
-  _quality: 0.7
+  _quality: 0.75
   _coverAvailable: 1
   _pathAvailable: 1
 --- !u!4 &1165397532 stripped

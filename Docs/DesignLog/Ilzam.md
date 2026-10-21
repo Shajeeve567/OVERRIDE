@@ -94,15 +94,15 @@ $$P(r) = \frac{C(r) + k}{\sum_{i} C(i) + 3k}$$
 ## 3. Autonomous Perception Sensors
 
 ### 3.1 Vision Sensor (`VisionSensor.cs`)
-* **3D Field of View (FOV)**: Configurable cone ($120^\circ$ horizontal/vertical). Evaluated using normalized dot products:
+* **3D Field of View (FOV)**: Configurable cone; the Warden visual prefab is configured to $100^\circ$ and $35\text{ m}$. It is evaluated using normalized dot products:
   $$\vec{d} = \frac{\vec{T} - \vec{E}}{\|\vec{T} - \vec{E}\|}, \quad \vec{F}_{\text{eye}} \cdot \vec{d} \ge \cos\left(\frac{\text{FOV}}{2}\right)$$
 * **Layer-Masked Occlusion Raycasting**: `Physics.Raycast` against `ObstacleLayers`, verifying target root identity to prevent false occlusions.
 * **Memory Retention**: Tracks `LastSeenPosition` and `LastSeenTime` after sight is broken, allowing the AI to deliberate using confirmed memory without cheating.
 
 ### 3.2 Hearing Sensor (`HearingSensor.cs`)
 * **NoiseBus Integration**: Subscribes to global sound events emitted by `FootstepNoise.cs` and weapon discharges.
-* **Sensitivity Multiplier ($2.5\times$)**: Amplifies human footsteps ($6.0\text{ m}$ base radius) up to $15\text{ m}$.
-* **Obstacle Attenuation ($0.8\times$)**: Raycasts between emitter and listener; obstructed noise is attenuated rather than completely silenced, allowing the Warden to track footsteps behind pillars.
+* **Configurable sensitivity**: The isolated gameplay test uses a $25\text{ m}$ cap and $2.5\times$ multiplier; the reusable prefab keeps the project baseline of $15\text{ m}$ and $1.0\times$ so test balance does not leak into the main game.
+* **Obstacle attenuation**: Raycasts between emitter and listener; obstructed noise is attenuated rather than completely silenced. The isolated test uses $0.8\times$ while the reusable prefab uses the baseline $0.5\times$.
 * **Eye-Level Listener**: Positioned at $Y = 1.9\text{ m}$ (head height) to eliminate floor raycast clipping.
 
 ---
@@ -111,9 +111,9 @@ $$P(r) = \frac{C(r) + k}{\sum_{i} C(i) + 3k}$$
 
 ### 4.1 Continuous Threat Facing & Strafing
 * Previously, the Warden faced only in his movement path direction, causing him to turn his back to the player when falling back.
-* **Solution**: `WardenGameplayController.UpdateFacing()` runs continuously in `LateUpdate()`. While repositioning or backpedaling to cover, the Warden maintains upper-body rotation towards the player's last known position:
+* **Solution**: `WardenGameplayController.UpdateFacing()` runs continuously in `LateUpdate()`. While repositioning or backpedaling to cover, the current implementation rotates the Warden root towards the player's last known position:
   $$\vec{D} = \vec{P}_{\text{lastKnown}} - \vec{W}_{\text{pos}}, \quad \text{Rotation} = \text{Slerp}(\text{rot}, \text{LookRotation}(\vec{D}), \omega_{\text{aim}} \cdot \Delta t)$$
-* **Result**: His 120° FOV continuously monitors the player's cover. The instant the player peeks, the Warden detects them and fires with zero latency.
+* **Result**: The $100^\circ$ Warden FOV remains directed towards confirmed threat memory while moving. Reacquisition is interval-based (vision checks and AI decisions), so it is responsive but not zero-latency.
 
 ### 4.2 Tactical Cover Balancing
 Cover points are balanced to incentivize proactive, intelligent combat:
@@ -121,10 +121,10 @@ Cover points are balanced to incentivize proactive, intelligent combat:
 * **Flank Cover**: Quality `0.85`, lateral angle ($d \approx 8\text{ m}$).
 * **Current Cover**: Quality `0.75`.
 * **Retreat Cover**: Quality `0.70`, fallback distance ($d \approx 13\text{ m}$).
-* **Dynamic Loop**: Because `Advance` and `Flank` have higher quality than `Retreat`, the Warden aggressively advances to flush out a hidden player. He only retreats when low on ammo ($0/12$), reloads safely, and immediately advances back into the fight.
+* **Demonstrated loop**: In the isolated test layout, the higher-quality advance/flank markers make the Warden reposition when the player hides. These are authored semantic markers, not automatic geometry or NavMesh cover analysis. Retreat/reload is score-dependent, with a safe reload fallback whenever another action is selected with fewer than three rounds.
 
 ### 4.3 Weapon Self-Damage Filter
-* In `WardenWeapon.cs`, firing rays use `Physics.RaycastAll` sorted by distance, ignoring `candidate.collider.transform.root == transform.root`. This prevents self-damage against the Warden's own capsule collider.
+* In `WardenWeapon.cs`, firing rays use `Physics.RaycastAll` sorted by distance and ignore colliders inside the firing Warden's controller hierarchy. This prevents self-damage without accidentally ignoring another Warden under a shared scene parent.
 
 ---
 
@@ -133,7 +133,7 @@ Cover points are balanced to incentivize proactive, intelligent combat:
 ### 5.1 Pipeline & Standards
 * **DCC Tool**: Blender 4.x / 3.6 LTS.
 * **Export Protocol**: FBX format, $+Z$ forward, $+Y$ up, scale $1.0$, transform rotations applied.
-* **Texture Atlasing**: UV unwrapped into single non-overlapping 2048x1024 / 1024x512 PBR atlas sheets.
+* **Texture Atlasing**: Imported models contain UV layers and use the documented 2048x1024 / 1024x512 PBR atlas workflow. UV-layer presence and material wiring were verified; non-overlap should be evidenced separately with Blender UV screenshots.
 * **URP Lit Shaders**: Albedo (`_BaseMap`), Metallic/Smoothness (`_MetallicGlossMap`), Tangent-space Normal (`_BumpMap`), and Emission (`_EmissionMap`).
 
 ### 5.2 Model Statistics & Poly-Budget Audit
@@ -142,7 +142,7 @@ All assets conform strictly to the assignment's 10,000-triangle budget:
 
 | Asset | Blender Source | FBX Export | Triangles | UV Status | Budget Conformance |
 |---|---|---|---|---|---|
-| **Refined Warden** | `ArtSource/Warden/Warden_Refined.blend` | `Assets/.../Warden.fbx` | **5,064** | Fully unwrapped | **-49.4%** under budget |
+| **Refined Warden** | `ArtSource/Warden/Warden_Refined.blend` | `Assets/_Project/Art/Models/Warden/Warden_Refined.fbx` | **5,064** | UV layer present | **-49.4%** under budget |
 | **Seeker Hunter** | `ArtSource/Seeker/Seeker_Hunter.blend` | `Assets/.../Seeker_Hunter.fbx` | **6,448** | Fully unwrapped | **-35.5%** under budget |
 | **Wisp Drone** | `ArtSource/Wisp/Wisp.blend` | `Assets/.../Wisp.fbx` | **4,142** | Fully unwrapped | **-58.6%** under budget |
 | **Player Rifle** | `ArtSource/Rifle/Rifle.blend` | `Assets/.../Rifle.fbx` | **3,504** | Fully unwrapped | **-65.0%** under budget |
@@ -159,18 +159,20 @@ All assets conform strictly to the assignment's 10,000-triangle budget:
 
 ## 6. Automated Verification & Testing
 
-The implementation is verified by **41 automated EditMode unit tests** passing with exit code 0:
+The implementation is verified by **45 automated EditMode tests** passing in a clean isolated Unity batch run on 21 October 2026:
 
 * `DirectorBrainTests` (16 tests): Validates ARGUS director progression and cost scoring.
 * `WardenExpectimaxBrainTests` (7 tests): Validates depth-2 expansions, probability learning, empty-ammo fallback, and tactical weight equations.
 * `HearingSensorTests` (6 tests): Validates radius thresholds, wall attenuation, stale event rejection, and noise filtering.
 * `SeekerAssetTests` (3 tests): Validates Seeker hierarchy, weak point multipliers, and asset builder.
-* `WardenGameplayAdapterTests` (9 tests):
+* `WardenGameplayAdapterTests` (13 tests):
   * Weapon self-damage immunity.
   * Noise-driven look rotation while hidden.
   * Continuous threat facing while moving along path.
-  * Runtime health and cover quality configuration.
-  * Empty ammo safe-reload trigger in cover.
+  * Scene balance is preserved while external references and the vision target are wired.
+  * Empty and one/two-round magazine reload handling.
+  * Immediate weapon cancellation on Warden death.
+  * Two Wardens under one shared parent can still damage one another.
 
 ---
 
@@ -181,6 +183,6 @@ The implementation is verified by **41 automated EditMode unit tests** passing w
 2. **"How does the AI prevent cheating?"**  
    *The Expectimax brain has zero access to Unity transforms or physics raycasts. When the player is hidden, decisions are made purely on confirmed sensor memory (`LastSeenPosition` or `LastHeardPosition`). If the player sneaks away silently, the Warden inspects where the player was last detected.*
 3. **"How did you optimize your 3D models for runtime performance?"**  
-   *Every model was modeled with clean quad topology, baked normal maps to capture high-resolution bevels, and packed into unified material atlases to minimize draw calls in URP.*
+   *The submitted assets remain below the 10,000-triangle budget, import with UV layers, and use reusable URP materials and atlas textures. Topology and UV non-overlap are demonstrated with Blender evidence rather than inferred from the Unity importer alone.*
 4. **"How do you ensure smooth coordination with other developers' branches?"**  
    *I used an adapter pattern (`WardenGameplayController`) that reads team contracts (`AgentMotor`, `Health`, `NoiseBus`) without mutating shared core interfaces, keeping all work merge-safe and isolated in unit-tested scenes.*

@@ -45,6 +45,7 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
     private Health _playerHealth;
     private Collider _playerCollider;
     private WardenCoverPoint _movementTarget;
+    private Health _subscribedHealth;
     private Vector3 _lastKnownPosition;
     private float _lastKnownTime = float.NegativeInfinity;
     private float _nextDecisionTime;
@@ -64,13 +65,17 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
     public Vector3 LastKnownPosition => _lastKnownPosition;
     public bool HasKnownPosition => _hasKnownPosition;
     public WardenCoverPoint CurrentCover => _currentCover;
+    public Transform PlayerTarget => _playerTarget;
+    public DirectorController Director => _director;
+    public WardenCoverPoint AdvanceCover => _advanceCover;
+    public WardenCoverPoint FlankCover => _flankCover;
+    public WardenCoverPoint RetreatCover => _retreatCover;
 
     private void Awake()
     {
         EnsureBrain();
         _command.Path = null;
         CacheLocalReferences();
-        ApplyRuntimeConfiguration();
     }
 
     private void EnsureBrain()
@@ -81,9 +86,13 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
 
     private void Start()
     {
-        ApplyRuntimeConfiguration();
         if (_currentCover != null)
             _currentCover.TryOccupy(gameObject);
+    }
+
+    private void OnEnable()
+    {
+        CacheLocalReferences();
     }
 
     private void OnDisable()
@@ -91,6 +100,7 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         _currentCover?.Release(gameObject);
         _movementTarget?.Release(gameObject);
         _weapon?.CancelActions();
+        SetHealthSubscription(null);
     }
 
     private void LateUpdate()
@@ -183,6 +193,18 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         if (_health != null && _health.IsDead)
         {
             StopMovement();
+            _weapon?.CancelActions();
+            return;
+        }
+
+        if (_weapon != null &&
+            action != WardenAction.RetreatAndReload &&
+            _weapon.Ammo < _weapon.RequiredAmmoForBurst)
+        {
+            StopMovement();
+            _command.AnimationIntent = "Reload";
+            if (!_weapon.IsReloading && !_weapon.IsFiring)
+                _weapon.StartReload();
             return;
         }
 
@@ -214,8 +236,9 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
                 if (_weapon != null && !_weapon.IsReloading)
                 {
                     bool outOfAmmo = _weapon.Ammo == 0;
+                    bool cannotFireFullBurst = _weapon.Ammo < _weapon.RequiredAmmoForBurst;
                     bool safeToReload = _weapon.Ammo < _weapon.MagazineSize && (_vision == null || !_vision.CanSeeTarget);
-                    if (outOfAmmo || safeToReload)
+                    if (outOfAmmo || cannotFireFullBurst || safeToReload)
                     {
                         _weapon.StartReload();
                     }
@@ -375,6 +398,7 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         if (_hearing == null) _hearing = GetComponent<HearingSensor>();
         if (_weapon == null) _weapon = GetComponent<WardenWeapon>();
         if (_health == null) _health = GetComponent<Health>();
+        SetHealthSubscription(_health);
         CachePlayerReferences();
     }
 
@@ -390,35 +414,57 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         if (_playerTarget == null) return;
         if (_playerHealth == null) _playerHealth = _playerTarget.GetComponentInParent<Health>();
         if (_playerCollider == null) _playerCollider = _playerTarget.GetComponentInParent<Collider>();
+        if (_vision != null && _vision.Target != _playerTarget)
+            _vision.Target = _playerTarget;
     }
 
-    public void ApplyRuntimeConfiguration()
+    /// <summary>
+    /// Supplies scene-owned dependencies without coupling the reusable Warden prefab to a
+    /// particular player, Director, or set of cover markers.
+    /// </summary>
+    public void InitializeExternalReferences(
+        Transform playerTarget,
+        DirectorController director,
+        WardenCoverPoint currentCover,
+        WardenCoverPoint advanceCover,
+        WardenCoverPoint flankCover,
+        WardenCoverPoint retreatCover)
     {
-        CacheLocalReferences();
+        _playerTarget = playerTarget;
+        _director = director;
+        _currentCover = currentCover;
+        _advanceCover = advanceCover;
+        _flankCover = flankCover;
+        _retreatCover = retreatCover;
+        _playerHealth = null;
+        _playerCollider = null;
 
-        if (_health != null && _health.Max < 350f)
-        {
-            _health.Configure(350f, false);
-        }
+        if (_vision != null)
+            _vision.Target = playerTarget;
 
-        if (_playerHealth != null && _playerHealth.Max < 200f)
-        {
-            _playerHealth.Configure(200f, false);
-            _playerHealth.ResetHealth();
-        }
+        if (playerTarget != null)
+            CachePlayerReferences();
+    }
 
-        if (_hearing != null)
-        {
-            _hearing.HearingRange = Mathf.Max(_hearing.HearingRange, 25f);
-            _hearing.SensitivityMultiplier = Mathf.Max(_hearing.SensitivityMultiplier, 2.5f);
-            _hearing.ObstructedRangeMultiplier = Mathf.Max(_hearing.ObstructedRangeMultiplier, 0.8f);
-        }
+    private void SetHealthSubscription(Health health)
+    {
+        if (_subscribedHealth == health)
+            return;
 
-        // Dynamically balance cover qualities so advance/flank provide tactical offensive incentives
-        if (_advanceCover != null && _advanceCover.Quality < 0.85f) _advanceCover.Quality = 0.85f;
-        if (_flankCover != null && _flankCover.Quality < 0.85f) _flankCover.Quality = 0.85f;
-        if (_currentCover != null && _currentCover.Quality < 0.75f) _currentCover.Quality = 0.75f;
-        if (_retreatCover != null && _retreatCover.Quality > 0.70f) _retreatCover.Quality = 0.70f;
+        if (_subscribedHealth != null)
+            _subscribedHealth.Died -= HandleDeath;
+
+        _subscribedHealth = health;
+        if (_subscribedHealth != null)
+            _subscribedHealth.Died += HandleDeath;
+    }
+
+    private void HandleDeath()
+    {
+        StopMovement();
+        _command.Fire = false;
+        _command.AnimationIntent = "Destroyed";
+        _weapon?.CancelActions();
     }
 
     private Vector3 GetPlayerAimPoint()
@@ -449,7 +495,14 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         _advanceCover = advanceCover;
         _flankCover = flankCover;
         _retreatCover = retreatCover;
-        CachePlayerReferences();
+        SetHealthSubscription(_health);
+        InitializeExternalReferences(
+            playerTarget,
+            director,
+            currentCover,
+            advanceCover,
+            flankCover,
+            retreatCover);
     }
 #endif
 

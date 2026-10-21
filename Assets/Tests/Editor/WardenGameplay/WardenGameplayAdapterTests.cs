@@ -161,6 +161,31 @@ namespace Override.WardenGameplay.Tests
         }
 
         [Test]
+        public void WardenWeapon_WardensUnderSharedParent_CanDamageEachOther()
+        {
+            GameObject group = CreateObject("Enemy Group");
+            GameObject shooter = CreateObject("Shooter Warden");
+            shooter.transform.SetParent(group.transform);
+            shooter.AddComponent(_controllerType);
+
+            Component weapon = shooter.AddComponent(_weaponType);
+            Invoke(weapon, "Configure", shooter.transform, (LayerMask)(~0));
+            Invoke(weapon, "Awake");
+
+            GameObject target = CreateObject("Target Warden");
+            target.transform.SetParent(group.transform);
+            target.transform.position = new Vector3(0f, 0f, 5f);
+            target.AddComponent<BoxCollider>().size = new Vector3(1f, 2f, 1f);
+            Component targetHealth = target.AddComponent(_healthType);
+            Invoke(targetHealth, "Configure", 100f, false);
+
+            Physics.SyncTransforms();
+            Invoke(weapon, "FireShot", target.transform.position);
+
+            Assert.That(Read<float>(targetHealth, "Current"), Is.EqualTo(92f).Within(0.001f));
+        }
+
+        [Test]
         public void HoldAction_WhenAmmoEmpty_TriggersReload()
         {
             GameObject warden = CreateObject("Warden");
@@ -177,6 +202,7 @@ namespace Override.WardenGameplay.Tests
             Set(vision, "Range", 20f);
             Set(vision, "FieldOfView", 120f);
             Invoke(weapon, "Awake");
+            Invoke(health, "Configure", 100f, false);
             Invoke(controller, "Awake");
 
             FieldInfo ammoField = _weaponType.GetField("_ammo", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -202,6 +228,61 @@ namespace Override.WardenGameplay.Tests
         }
 
         [Test]
+        public void NonReloadAction_WhenVisibleAmmoCannotCompleteBurst_TriggersReloadFallback()
+        {
+            GameObject warden = CreateObject("Warden");
+            GameObject player = CreateObject("Player");
+            player.transform.position = new Vector3(0f, 0f, 5f);
+
+            Component vision = warden.AddComponent(_visionType);
+            Component weapon = warden.AddComponent(_weaponType);
+            Component health = warden.AddComponent(_healthType);
+            Component controller = warden.AddComponent(_controllerType);
+            Set(vision, "Target", player.transform);
+            Set(vision, "Range", 20f);
+            Set(vision, "ObstacleLayers", (LayerMask)0);
+            Invoke(weapon, "Awake");
+            Invoke(health, "Configure", 100f, false);
+            Invoke(controller, "Awake");
+
+            FieldInfo ammoField = _weaponType.GetField("_ammo", BindingFlags.Instance | BindingFlags.NonPublic);
+            ammoField.SetValue(weapon, 2);
+            Assert.That(Invoke<bool>(vision, "CheckVisibilityNow"), Is.True);
+
+            _controllerType.GetMethod("Configure", BindingFlags.Instance | BindingFlags.Public).Invoke(
+                controller,
+                new object[] { vision, null, weapon, health, player.transform, null, null, null, null, null });
+            Invoke(controller, "ApplyDecision", WardenAction.Flank);
+
+            Assert.That(Read<bool>(weapon, "IsReloading"), Is.True);
+        }
+
+        [Test]
+        public void WardenDeath_CancelsWeaponActionsImmediately()
+        {
+            GameObject warden = CreateObject("Warden");
+            Component weapon = warden.AddComponent(_weaponType);
+            Component health = warden.AddComponent(_healthType);
+            Component controller = warden.AddComponent(_controllerType);
+            Invoke(weapon, "Awake");
+            Invoke(health, "Configure", 10f, false);
+            Invoke(controller, "Awake");
+
+            FieldInfo ammoField = _weaponType.GetField("_ammo", BindingFlags.Instance | BindingFlags.NonPublic);
+            ammoField.SetValue(weapon, 1);
+
+            _controllerType.GetMethod("Configure", BindingFlags.Instance | BindingFlags.Public).Invoke(
+                controller,
+                new object[] { null, null, weapon, health, null, null, null, null, null, null });
+
+            Assert.That(Invoke<bool>(weapon, "StartReload"), Is.True);
+            Invoke(health, "TakeDamage", 10f, Vector3.zero, Vector3.up);
+
+            Assert.That(Read<bool>(health, "IsDead"), Is.True);
+            Assert.That(Read<bool>(weapon, "IsReloading"), Is.False);
+        }
+
+        [Test]
         public void HearingNoise_WhileHiddenAndStationary_UpdatesFacingAndLastKnownPosition()
         {
             GameObject warden = CreateObject("Warden");
@@ -222,6 +303,7 @@ namespace Override.WardenGameplay.Tests
             Set(vision, "FieldOfView", 60f);
             Set(hearing, "HearingRange", 20f);
             Invoke(hearing, "Awake");
+            Invoke(health, "Configure", 100f, false);
             Invoke(controller, "Awake");
 
             MethodInfo configure = _controllerType.GetMethod("Configure", BindingFlags.Instance | BindingFlags.Public);
@@ -303,9 +385,9 @@ namespace Override.WardenGameplay.Tests
 
             // Simulate active movement path towards (0, 0, 10)
             object command = commandField.GetValue(controller);
-            PropertyInfo pathProp = command.GetType().GetProperty("Path");
-            Assert.That(pathProp, Is.Not.Null);
-            pathProp.SetValue(command, new[] { new Vector3(0f, 0f, 10f) });
+            FieldInfo pathField = command.GetType().GetField("Path");
+            Assert.That(pathField, Is.Not.Null);
+            pathField.SetValue(command, new[] { new Vector3(0f, 0f, 10f) });
 
             // Call UpdateFacing with active path
             MethodInfo updateFacing = _controllerType.GetMethod("UpdateFacing", BindingFlags.Instance | BindingFlags.Public);
@@ -317,11 +399,14 @@ namespace Override.WardenGameplay.Tests
         }
 
         [Test]
-        public void ApplyRuntimeConfiguration_ConfiguresHealthAndCoverQualities()
+        public void Configure_DoesNotOverrideSceneBalanceAndWiresVisionTarget()
         {
             GameObject warden = CreateObject("Warden");
             Component wardenHealth = warden.AddComponent(_healthType);
             Invoke(wardenHealth, "Configure", 100f, false);
+            Component vision = warden.AddComponent(_visionType);
+            Component hearing = warden.AddComponent(_hearingType);
+            Set(hearing, "HearingRange", 12f);
 
             GameObject player = CreateObject("Player");
             Component playerHealth = player.AddComponent(_healthType);
@@ -339,18 +424,17 @@ namespace Override.WardenGameplay.Tests
             MethodInfo configure = _controllerType.GetMethod("Configure", BindingFlags.Instance | BindingFlags.Public);
             configure.Invoke(controller, new object[]
             {
-                null, null, null, wardenHealth, player.transform, null,
+                vision, hearing, null, wardenHealth, player.transform, null,
                 null, advance, flank, retreat
             });
 
-            MethodInfo applyConfig = _controllerType.GetMethod("ApplyRuntimeConfiguration", BindingFlags.Instance | BindingFlags.Public);
-            applyConfig.Invoke(controller, null);
-
-            Assert.That(Read<float>(wardenHealth, "Max"), Is.EqualTo(350f));
-            Assert.That(Read<float>(playerHealth, "Max"), Is.EqualTo(200f));
-            Assert.That(Read<float>(advance, "Quality"), Is.GreaterThanOrEqualTo(0.85f));
-            Assert.That(Read<float>(flank, "Quality"), Is.GreaterThanOrEqualTo(0.85f));
-            Assert.That(Read<float>(retreat, "Quality"), Is.LessThanOrEqualTo(0.70f));
+            Assert.That(Read<float>(wardenHealth, "Max"), Is.EqualTo(100f));
+            Assert.That(Read<float>(playerHealth, "Max"), Is.EqualTo(100f));
+            Assert.That(Read<float>(hearing, "HearingRange"), Is.EqualTo(12f));
+            Assert.That(Read<float>(advance, "Quality"), Is.EqualTo(0.5f));
+            Assert.That(Read<float>(flank, "Quality"), Is.EqualTo(0.5f));
+            Assert.That(Read<float>(retreat, "Quality"), Is.EqualTo(0.95f));
+            Assert.That(Read<Transform>(vision, "Target"), Is.SameAs(player.transform));
         }
 
         private Component CreateComponent(string name, Type type)

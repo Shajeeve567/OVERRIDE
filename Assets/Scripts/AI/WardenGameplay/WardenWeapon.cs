@@ -39,10 +39,12 @@ public sealed class WardenWeapon : MonoBehaviour
     private LineRenderer _tracer;
     private Material _tracerMaterial;
     private float _hideTracerTime;
+    private Transform _owner;
 
     public int Ammo => _ammo;
     public int MagazineSize => _magazineSize;
     public float Range => _range;
+    public int RequiredAmmoForBurst => _shotsPerBurst;
     public bool IsReloading { get; private set; }
     public bool IsFiring => _burstRoutine != null;
     public Transform Muzzle => _muzzle;
@@ -55,6 +57,7 @@ public sealed class WardenWeapon : MonoBehaviour
 
     private void Awake()
     {
+        CacheOwner();
         _ammo = _magazineSize;
     }
 
@@ -138,7 +141,7 @@ public sealed class WardenWeapon : MonoBehaviour
             for (int i = 0; i < hits.Length; i++)
             {
                 RaycastHit candidate = hits[i];
-                if (candidate.collider != null && candidate.collider.transform.root == transform.root)
+                if (candidate.collider != null && IsOwnerCollider(candidate.collider.transform))
                     continue;
 
                 tracerEnd = candidate.point;
@@ -186,6 +189,21 @@ public sealed class WardenWeapon : MonoBehaviour
         IsReloading = false;
         _ammo = _magazineSize;
         ReloadFinished?.Invoke();
+    }
+
+    private void CacheOwner()
+    {
+        WardenGameplayController controller = GetComponentInParent<WardenGameplayController>();
+        _owner = controller != null ? controller.transform : transform;
+    }
+
+    private bool IsOwnerCollider(Transform candidate)
+    {
+        if (candidate == null)
+            return false;
+        if (_owner == null)
+            CacheOwner();
+        return candidate == _owner || candidate.IsChildOf(_owner);
     }
 
 #if UNITY_EDITOR
