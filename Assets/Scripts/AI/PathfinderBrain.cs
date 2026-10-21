@@ -3,12 +3,21 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using Override.Core;
 using Override.Director;
+using Override.Motor;
 
 namespace Override.AI
 {
     public class PathfinderBrain : MonoBehaviour, IAgentBrain, IDirectorDrone
     {
         private const float AttackRange = 12f;
+
+        [Header("No-Graph Fallback")]
+        [SerializeField, Tooltip("Debug fallback: chase the predicted target directly when the scene has no WaypointGraph. Ignored once a populated graph exists.")]
+        private bool allowDirectChaseWithoutGraph = true;
+
+        private readonly Vector3[] fallbackPath = new Vector3[1];
+        private WispVisuals wispVisuals;
+        private bool warnedNoGraph;
 
         private List<Vector3> currentPath = new List<Vector3>();
         private float lastPathTime = 0f;
@@ -26,7 +35,16 @@ namespace Override.AI
             transform.position = waypoint;
             currentPath.Clear();
             lastPathTime = -999f;
+
+            if (wispVisuals == null) wispVisuals = GetComponentInChildren<WispVisuals>(true);
+            if (wispVisuals != null) wispVisuals.PlaySpawn();
+
             Debug.Log("[Wisp] Launched from Director! Heading to player.");
+        }
+
+        private void Awake()
+        {
+            wispVisuals = GetComponentInChildren<WispVisuals>(true);
         }
 
         private void Start()
@@ -88,7 +106,25 @@ namespace Override.AI
             }
             else
             {
-                cmd.Path = new Vector3[] { transform.position };
+                bool noGraph = WaypointGraph.Instance == null ||
+                               WaypointGraph.Instance.nodes == null ||
+                               WaypointGraph.Instance.nodes.Count == 0;
+
+                if (allowDirectChaseWithoutGraph && noGraph)
+                {
+                    fallbackPath[0] = predictedTarget;
+                    cmd.Path = fallbackPath;
+
+                    if (!warnedNoGraph)
+                    {
+                        warnedNoGraph = true;
+                        Debug.LogWarning("[Wisp] No waypoint graph available - using direct chase fallback.");
+                    }
+                }
+                else
+                {
+                    cmd.Path = new Vector3[] { transform.position };
+                }
             }
 
             cmd.LookTarget = snapshot.PlayerPosition;
