@@ -15,46 +15,56 @@ namespace Override.Motor
         [Header("Animation Culling")]
         public float cullDistance = 30f;
 
-        private Vector3 startPos;
-        private float currentBank = 0f;
-        private float lastYRotation;
+        [Header("Spawn Animation")]
+        public float spawnDuration = 0.35f;
+        public float spawnStartScale = 0.15f;
+
+        [Header("Attack Animation")]
+        public float attackDuration = 0.18f;
+        public float attackRecoil = 0.25f;
+        public float attackPitch = 10f;
+        public float attackScalePulse = 0.08f;
+
+        [Header("Hurt Animation")]
+        public float hurtDuration = 0.15f;
+        public float hurtShake = 0.06f;
+
+        [Header("Optional FX")]
+        [SerializeField] private TrailRenderer trail;
+        [SerializeField] private Light glowLight;
+        [SerializeField] private float glowBaseIntensity = 0.8f;
+        [SerializeField] private float glowAttackIntensity = 2f;
+
+        private Vector3 baseLocalPosition;
+        private Quaternion baseLocalRotation;
+        private Vector3 baseLocalScale;
+        private Transform wispRoot;
+        private float lastRootYaw;
+        private float currentBank;
+
+        private float spawnTimer = -1f;
+        private float attackTimer = -1f;
+        private float hurtTimer = -1f;
+        private bool isDead;
+        private bool isCulled;
 
         private Transform player;
         private MeshRenderer[] meshRenderers;
-        private bool isCulled;
 
         private void Awake()
         {
+            baseLocalPosition = transform.localPosition;
+            baseLocalRotation = transform.localRotation;
+            baseLocalScale = transform.localScale;
+            wispRoot = transform.parent != null ? transform.parent : transform;
+            lastRootYaw = wispRoot.eulerAngles.y;
+
             meshRenderers = GetComponentsInChildren<MeshRenderer>(true);
             EnsureWispIsHittable();
         }
 
-        private void EnsureWispIsHittable()
-        {
-            AgentMotor motor = GetComponentInParent<AgentMotor>();
-            GameObject wispRoot = motor != null ? motor.gameObject : transform.root.gameObject;
-
-            if (wispRoot.GetComponent<Collider>() == null)
-            {
-                wispRoot.AddComponent<CapsuleCollider>();
-            }
-
-            if (wispRoot.GetComponent<WispHealth>() == null)
-            {
-                wispRoot.AddComponent<WispHealth>();
-            }
-        }
-
-        public void SetVisible(bool visible)
-        {
-            isCulled = !visible;
-            SetRenderersVisible(visible);
-        }
-
         private void Start()
         {
-            startPos = transform.localPosition;
-            lastYRotation = transform.eulerAngles.y;
             FindPlayer();
         }
 
@@ -69,24 +79,139 @@ namespace Override.Motor
 
                 if (shouldCull != isCulled)
                 {
-                    isCulled = shouldCull;
-                    SetRenderersVisible(!isCulled);
+                    SetVisible(!shouldCull);
                 }
-
-                if (isCulled) return;
             }
 
-            float newY = startPos.y + Mathf.Sin(Time.time * hoverFrequency) * hoverAmplitude;
-            transform.localPosition = new Vector3(startPos.x, newY, startPos.z);
+            float dt = Time.deltaTime;
+            float rootYaw = wispRoot.eulerAngles.y;
+            float yawDelta = Mathf.DeltaAngle(lastRootYaw, rootYaw);
+            lastRootYaw = rootYaw;
 
-            float currentY = transform.eulerAngles.y;
-            float turnSpeed = Mathf.DeltaAngle(lastYRotation, currentY);
-            lastYRotation = currentY;
+            if (isCulled)
+            {
+                currentBank = Mathf.Lerp(currentBank, 0f, dt * bankSpeed);
+                return;
+            }
 
-            float targetBank = Mathf.Clamp(turnSpeed * 5f, -bankAmount, bankAmount);
-            currentBank = Mathf.Lerp(currentBank, targetBank, Time.deltaTime * bankSpeed);
+            float targetBank = isDead ? 0f : Mathf.Clamp(yawDelta * 5f, -bankAmount, bankAmount);
+            currentBank = Mathf.Lerp(currentBank, targetBank, dt * bankSpeed);
 
-            transform.localRotation = Quaternion.Euler(transform.localEulerAngles.x, transform.localEulerAngles.y, -currentBank);
+            float hover = isDead ? 0f : Mathf.Sin(Time.time * hoverFrequency) * hoverAmplitude;
+            Vector3 offset = new Vector3(0f, hover, 0f);
+            float pitch = 0f;
+            float yawOffset = 0f;
+            float scale = 1f;
+
+            if (spawnTimer >= 0f)
+            {
+                spawnTimer += dt;
+                float t = Mathf.Clamp01(spawnTimer / Mathf.Max(0.01f, spawnDuration));
+                scale *= Mathf.SmoothStep(spawnStartScale, 1f, t);
+                yawOffset = (1f - t) * 360f;
+                if (t >= 1f) spawnTimer = -1f;
+            }
+
+            if (attackTimer >= 0f)
+            {
+                attackTimer += dt;
+                float t = Mathf.Clamp01(attackTimer / Mathf.Max(0.01f, attackDuration));
+                float kick = 1f - t;
+
+                offset += baseLocalRotation * Vector3.back * (attackRecoil * kick);
+                pitch -= attackPitch * kick;
+                scale *= 1f + attackScalePulse * kick;
+
+                if (t >= 1f) attackTimer = -1f;
+            }
+
+            if (hurtTimer >= 0f)
+            {
+                hurtTimer += dt;
+                float t = Mathf.Clamp01(hurtTimer / Mathf.Max(0.01f, hurtDuration));
+                float shake = hurtShake * (1f - t);
+
+                offset += new Vector3(
+                    Random.Range(-shake, shake),
+                    Random.Range(-shake, shake),
+                    Random.Range(-shake, shake));
+
+                if (t >= 1f) hurtTimer = -1f;
+            }
+
+            transform.localPosition = baseLocalPosition + offset;
+            transform.localRotation = baseLocalRotation * Quaternion.Euler(pitch, yawOffset, -currentBank);
+            transform.localScale = baseLocalScale * scale;
+
+            UpdateGlow();
+        }
+
+        public void PlaySpawn()
+        {
+            if (isDead) return;
+            spawnTimer = 0f;
+        }
+
+        public void PlayAttack()
+        {
+            if (isDead) return;
+            attackTimer = 0f;
+        }
+
+        public void PlayHurt()
+        {
+            if (isDead) return;
+            hurtTimer = 0f;
+        }
+
+        public void PlayDeath()
+        {
+            isDead = true;
+            spawnTimer = -1f;
+            attackTimer = -1f;
+            hurtTimer = -1f;
+        }
+
+        public void SetVisible(bool visible)
+        {
+            isCulled = !visible;
+            SetRenderersVisible(visible);
+
+            if (trail != null)
+            {
+                trail.enabled = visible;
+                if (visible) trail.Clear();
+            }
+
+            if (glowLight != null)
+            {
+                glowLight.enabled = visible;
+            }
+        }
+
+        private void UpdateGlow()
+        {
+            if (glowLight == null) return;
+
+            float pulse = 1f + Mathf.Sin(Time.time * 4f) * 0.15f;
+            float attackBoost = attackTimer >= 0f ? glowAttackIntensity : 0f;
+            glowLight.intensity = glowBaseIntensity * pulse + attackBoost;
+        }
+
+        private void EnsureWispIsHittable()
+        {
+            AgentMotor motor = GetComponentInParent<AgentMotor>();
+            GameObject wispRootObject = motor != null ? motor.gameObject : transform.root.gameObject;
+
+            if (wispRootObject.GetComponent<Collider>() == null)
+            {
+                wispRootObject.AddComponent<CapsuleCollider>();
+            }
+
+            if (wispRootObject.GetComponent<WispHealth>() == null)
+            {
+                wispRootObject.AddComponent<WispHealth>();
+            }
         }
 
         private void FindPlayer()
