@@ -143,8 +143,7 @@ namespace Override.Combat
 
         void UpdateAiming()
         {
-            IsAiming = controller.InputEnabled && input.AimHeld && !controller.IsSprinting && !IsReloading
-                       && (carry == null || !carry.IsCarrying);
+            IsAiming = controller.InputEnabled && input.AimHeld && !controller.IsSprinting && !IsReloading;
             controller.SpeedMultiplier = IsAiming ? aimMoveScale : 1f;
             controller.LookMultiplier = IsAiming ? aimLookScale : 1f;
         }
@@ -152,8 +151,8 @@ namespace Override.Combat
         bool CanFire() =>
             Time.time >= nextFireTime
             && !IsReloading
-            && !controller.IsSprinting                       // GDD: no firing while sprinting
-            && (carry == null || !carry.IsCarrying);         // hands full with a canister
+            && !controller.IsSprinting;                      // GDD: no firing while sprinting
+            // Firing while carrying a canister is allowed: it's held in the left hand, the rifle in the right.
 
         void Fire()
         {
