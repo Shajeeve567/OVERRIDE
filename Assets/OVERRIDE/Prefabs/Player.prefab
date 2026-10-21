@@ -450,7 +450,7 @@ MonoBehaviour:
   fireRate: 8
   range: 60
   magazineSize: 30
-  reloadTime: 2
+  reloadTime: 1.4
   gunshotNoise: 30
   startingReserve: 90
   maxReserve: 180
