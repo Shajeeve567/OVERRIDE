@@ -11,6 +11,7 @@ namespace Override.AI
     {
         private const float AttackRange = 15f;
         private const float BayExitRadius = 1.5f;
+        private const float DirectChaseRadius = 0.45f;
         private const int LineOfSightHitCapacity = 32;
 
         [SerializeField] private bool allowDirectChaseFallback = true;
@@ -22,6 +23,7 @@ namespace Override.AI
         private Vector3 bayExitWaypoint;
 
         private static readonly RaycastHit[] lineOfSightHits = new RaycastHit[LineOfSightHitCapacity];
+        private static readonly RaycastHit[] directChaseHits = new RaycastHit[LineOfSightHitCapacity];
 
         private List<Vector3> currentPath = new List<Vector3>();
         private float lastPathTime = 0f;
@@ -134,9 +136,10 @@ namespace Override.AI
             if (Time.time - lastPathTime > pathRefreshRate)
             {
                 lastPathTime = Time.time;
-                // [Integration] FindPath returns null when the graph has no route; keep an empty list instead,
-                // or currentPath.Clear() above throws every frame once the player is in attack range.
-                currentPath = FindPath(transform.position, predictedTarget, snapshot.PlayerForward) ?? new List<Vector3>();
+
+                currentPath = hasLineOfSight && HasClearDirectPath(snapshot.PlayerPosition)
+                    ? new List<Vector3> { snapshot.PlayerPosition }
+                    : FindPath(transform.position, predictedTarget, snapshot.PlayerForward) ?? new List<Vector3>();
             }
 
             if (currentPath != null && currentPath.Count > 0)
@@ -146,7 +149,7 @@ namespace Override.AI
             else
             {
                 cmd.Path = allowDirectChaseFallback
-                    ? new Vector3[] { snapshot.PlayerPosition }
+                    ? new Vector3[] { predictedTarget }
                     : new Vector3[] { transform.position };
             }
 
@@ -210,7 +213,6 @@ namespace Override.AI
                 RaycastHit hit = lineOfSightHits[i];
                 if (hit.collider == null) continue;
 
-                // The Wisp's own CharacterController and visual colliders are not cover.
                 if (hit.transform.root == transform.root) continue;
 
                 bool isPlayer = hit.transform.CompareTag("Player") ||
@@ -222,13 +224,50 @@ namespace Override.AI
                     continue;
                 }
 
-                // Other agents are not walls; the shot passes through them.
                 if (hit.collider.GetComponentInParent<IDamageable>() != null) continue;
 
                 nearestBlockerHit = Mathf.Min(nearestBlockerHit, hit.distance);
             }
 
             return nearestPlayerHit < nearestBlockerHit;
+        }
+
+        private bool HasClearDirectPath(Vector3 playerPos)
+        {
+            Vector3 target = playerController != null
+                ? playerController.bounds.center
+                : playerPos + Vector3.up * 1f;
+            Vector3 delta = target - transform.position;
+            float distance = delta.magnitude;
+
+            if (distance < 0.001f) return true;
+
+            int hitCount = Physics.SphereCastNonAlloc(
+                transform.position,
+                DirectChaseRadius,
+                delta / distance,
+                directChaseHits,
+                distance,
+                ~0,
+                QueryTriggerInteraction.Ignore);
+
+            for (int i = 0; i < hitCount; i++)
+            {
+                RaycastHit hit = directChaseHits[i];
+                if (hit.collider == null) continue;
+
+                if (hit.transform.root == transform.root) continue;
+
+                bool isPlayer = hit.transform.CompareTag("Player") ||
+                                hit.transform.root.CompareTag("Player");
+                if (isPlayer) continue;
+
+                if (hit.collider.GetComponentInParent<IDamageable>() != null) continue;
+
+                return false;
+            }
+
+            return true;
         }
 
         private List<Vector3> FindPath(Vector3 startPos, Vector3 targetPos, Vector3 playerForward)
