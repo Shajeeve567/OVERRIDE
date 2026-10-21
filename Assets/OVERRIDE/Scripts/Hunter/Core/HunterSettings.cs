@@ -53,6 +53,12 @@ namespace Override.HunterAI
         public float SearchSpeed = 3.5f;         // GDD m/s
         public float PursueSpeed = 6f;           // GDD m/s
 
+        // ---- Final phase recall (GDD Section 7)
+        /// The recall is treated as one more piece of evidence ("the intruder will come to the Core"),
+        /// applied every tick: wide and with a high floor, so it pulls the Seeker there but real noises still win.
+        public float RecallSigma = 10f;
+        public float RecallFloor = 0.15f;
+
         // ---- Recovery
         public float StuckSeconds = 2f;          // no progress this long = stuck
         public float StuckBlockSeconds = 3f;     // the next path cell is avoided this long

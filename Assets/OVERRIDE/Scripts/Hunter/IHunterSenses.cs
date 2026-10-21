@@ -38,6 +38,9 @@ namespace Override.Hunter
         /// The Director's alarm, 0-100 (0 if there's no Director).
         float Alarm { get; }
 
+        /// Final phase (GDD Section 7): ARGUS recalls surviving units to the Core. True while recalled.
+        bool IsRecalled(out Vector3 rallyPoint);
+
         /// Boxes covering closed doors and crates right now (refreshed before each plan).
         IReadOnlyList<Bounds> DynamicObstacles { get; }
     }

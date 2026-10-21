@@ -80,6 +80,11 @@ namespace Override.Hunter
         Vector3 visualRest;
         float lungeStart = -10f;
 
+        // Final phase recall: set once Labs, Maintenance and ServerHall are all overridden.
+        readonly HashSet<ZoneId> overridden = new HashSet<ZoneId>();
+        bool recalled;
+        Vector3 rally;
+
         /// Raised on each lunge that hits (audio, effects).
         public event System.Action Lunged;
 
@@ -97,6 +102,12 @@ namespace Override.Hunter
         public bool CamerasOnline => CameraNetwork.Online && (director == null || director.CamerasOnline);
         public float Alarm => director != null ? director.Alarm : 0f;
         public IReadOnlyList<Bounds> DynamicObstacles => obstacles;
+
+        public bool IsRecalled(out Vector3 rallyPoint)
+        {
+            rallyPoint = rally;
+            return recalled;
+        }
 
         public bool SenseContact(out Vector3 playerPosition)
         {
@@ -176,12 +187,28 @@ namespace Override.Hunter
         {
             NoiseBus.Emitted += OnNoise;
             CameraNetwork.Sighted += OnSighted;
+            GameEvents.TerminalOverridden += OnTerminalOverridden;
         }
 
         void OnDisable()
         {
             NoiseBus.Emitted -= OnNoise;
             CameraNetwork.Sighted -= OnSighted;
+            GameEvents.TerminalOverridden -= OnTerminalOverridden;
+        }
+
+        void OnTerminalOverridden(ZoneId zone)
+        {
+            overridden.Add(zone);
+            if (recalled || !overridden.Contains(ZoneId.Labs) || !overridden.Contains(ZoneId.Maintenance) ||
+                !overridden.Contains(ZoneId.ServerHall)) return;
+
+            var coreFloor = GameObject.Find("OVERRIDE_Greybox/Core/Floor");
+            var col = coreFloor != null ? coreFloor.GetComponent<Collider>() : null;
+            if (col == null) return;   // no Core in this scene (e.g. the sandbox)
+            rally = col.bounds.center;
+            recalled = true;
+            tickRequested = true;
         }
 
         // ---------------------------------------------------------------- senses

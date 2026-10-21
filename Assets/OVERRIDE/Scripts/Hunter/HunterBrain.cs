@@ -86,6 +86,11 @@ namespace Override.Hunter
                 foreach (var seen in senses.CameraSightings)
                     Belief.ApplyGaussian(seen, settings.CameraSigma, settings.CameraFloor);
 
+            // Final phase: ARGUS's recall order joins the evidence. No new behaviour branch: the belief
+            // simply leans towards the Core, and the same goal choice takes the Seeker there.
+            if (senses.IsRecalled(out Vector3 rally))
+                Belief.ApplyGaussian(rally, settings.RecallSigma, settings.RecallFloor);
+
             HasContact = senses.SenseContact(out Vector3 playerAt);
             if (HasContact) Belief.ApplyGaussian(playerAt, settings.ContactSigma, settings.ContactFloor);
             else Belief.ApplyNotFound(senses.Position, settings.ProximityRadius, settings.DetectionProbability);

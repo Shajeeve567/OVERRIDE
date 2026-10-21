@@ -93,6 +93,7 @@ The Seeker is **blind**. It keeps a probability for every 2 m cell of where the 
 | λ | 0.05 per m | A cell 20 m away needs e^1 ≈ 2.7× the mass to win over a near one |
 | Alarm reach | λ × (1 − 0.5·alarm/100) | High alarm = willing to search further (GDD §7) |
 | Hearing | 1.5 × noise radius, halved through a closed door | GDD |
+| Recall σ / floor | 10 m / 0.15 | Final phase (GDD §7): ARGUS's recall to the Core is applied as wide, weak evidence each tick, so the Seeker drifts to the Core but real noises still win |
 
 **[fill in]** any value changed after testing, and why.
 
