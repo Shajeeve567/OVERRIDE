@@ -13,6 +13,7 @@
 //     Terminals       HackTerminal + progress ring on the four placeholders (Core: 30 s, needs T1-T3)
 //     Doors           a SlidingDoor + LockableDoor in each main corridor (same table as the stand-in doors)
 //     Director        DirectorBridge, and the stand-in drone as its drone prefab until the Wisp exists
+//     Canisters       3 scrap canisters per zone (GDD must-have: the Seeker lure), prefab built if missing
 //     Ammo crates     one beside each terminal (GDD: "ammo crates at each terminal"), prefab built if missing
 //     Cameras         SecurityCameraSensor on Shajeeve's camera prefab (sightings for the Seeker)
 //     Seeker          one Seeker in Maintenance, built by HunterSetup if the prefab doesn't exist yet
@@ -87,6 +88,7 @@ namespace Override.EditorTools
             SwapPlayer(log);
             InstallTerminals(log);
             InstallAmmoCrates(log);
+            InstallCanisters(log);
             InstallDoors(log);
             InstallDirector(log);
             log.AppendLine(HunterSetup.EnsureCameraSensors());
@@ -101,6 +103,31 @@ namespace Override.EditorTools
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
             Debug.Log(log.ToString());
             EditorUtility.DisplayDialog("Integration", "Done. Check the Console for details, then save the scene (Cmd+S).", "OK");
+        }
+
+        /// Switches the teammates' agent debug panels (Director, every Warden) on or off together, e.g. off
+        /// for recording the demo so they don't cover the HUD. Scene settings only; their code is untouched.
+        [MenuItem("OVERRIDE/Integration/Toggle Agent Debug Panels")]
+        public static void ToggleAgentDebugPanels()
+        {
+            var director = Object.FindFirstObjectByType<DirectorController>();
+            bool show = director == null || !director.showPanel;   // flip, using the Director as the reference
+            if (director != null)
+            {
+                Undo.RecordObject(director, "Toggle debug panels");
+                director.showPanel = show;
+                EditorUtility.SetDirty(director);
+            }
+            int wardens = 0;
+            foreach (var w in Object.FindObjectsByType<WardenGameplayController>(FindObjectsSortMode.None))
+            {
+                var so = new SerializedObject(w);
+                so.FindProperty("_showDebugPanel").boolValue = show;
+                so.ApplyModifiedProperties();
+                wardens++;
+            }
+            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            Debug.Log($"[Integration] Agent debug panels {(show ? "ON" : "OFF")} (Director + {wardens} Warden(s)). Save the scene.");
         }
 
         /// For teammates' test scenes: only replaces the player (movement, rifle, health), nothing else.
@@ -193,6 +220,89 @@ namespace Override.EditorTools
                 EditorUtility.SetDirty(terminal);
                 log.AppendLine($"  + HackTerminal on {entry.name} ({entry.zone}{(entry.isCore ? ", 30 s, needs T1-T3" : "")})");
             }
+        }
+
+        const string CanisterPrefab = "Assets/OVERRIDE/Prefabs/ScrapCanister.prefab";
+
+        /// A small metal canister with a yellow hazard band: 0.5 m tall, 2 kg (set by ScrapCanister).
+        static GameObject BuildCanisterPrefab()
+        {
+            var metal = AssetDatabase.LoadAssetAtPath<Material>(Mats + "Prop_Metal.mat");
+            var hazard = AssetDatabase.LoadAssetAtPath<Material>(Mats + "Prop_Hazard.mat");
+
+            var root = GameObject.CreatePrimitive(PrimitiveType.Cylinder);   // keeps its CapsuleCollider
+            root.name = "ScrapCanister";
+            root.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);    // 0.25 m wide, 0.5 m tall
+            if (metal != null) root.GetComponent<Renderer>().sharedMaterial = metal;
+
+            var band = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            band.name = "HazardBand";
+            Object.DestroyImmediate(band.GetComponent<Collider>());
+            band.transform.SetParent(root.transform, false);
+            band.transform.localScale = new Vector3(1.04f, 0.15f, 1.04f);
+            if (hazard != null) band.GetComponent<Renderer>().sharedMaterial = hazard;
+
+            root.AddComponent<Rigidbody>();
+            root.AddComponent<ScrapCanister>();   // mass, Continuous Dynamic and interpolation set in its Awake
+            var prefab = PrefabUtility.SaveAsPrefabAsset(root, CanisterPrefab);
+            Object.DestroyImmediate(root);
+            return prefab;
+        }
+
+        static void InstallCanisters(System.Text.StringBuilder log)
+        {
+            if (Object.FindFirstObjectByType<ScrapCanister>() != null) { log.AppendLine("  = canisters already placed"); return; }
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(CanisterPrefab) ?? BuildCanisterPrefab();
+
+            var corridorBlocks = CorridorBlocks();
+            var root = new GameObject("OVERRIDE_Canisters").transform;
+            Undo.RegisterCreatedObjectUndo(root.gameObject, "Install canisters");
+            int count = 0;
+            foreach (var terminal in Object.FindObjectsByType<HackTerminal>(FindObjectsSortMode.None))
+            {
+                if (terminal.Zone == ZoneId.Core) continue;   // the Core is the finale, not a stealth zone
+                var floor = GameObject.Find($"OVERRIDE_Greybox/{terminal.Zone}/Floor");
+                var floorCol = floor != null ? floor.GetComponent<Collider>() : null;
+                if (floorCol == null) continue;
+                Bounds room = floorCol.bounds;
+                float y = room.max.y + 0.3f;
+                Vector3 term = new Vector3(terminal.transform.position.x, y, terminal.transform.position.z);
+                Vector3 centre = new Vector3(room.center.x, y, room.center.z);
+                Vector3 into = (centre - term).normalized;
+                Vector3 side = Vector3.Cross(Vector3.up, into);
+
+                // Two within throwing reach of the terminal (lure the Seeker before hacking), one mid-room.
+                foreach (var spot in new[] { term + into * 3f + side * 2.5f, term + into * 3f - side * 2.5f,
+                                             Vector3.Lerp(term, centre, 0.6f) })
+                {
+                    Vector3 at = Safe(spot, room, centre, corridorBlocks);
+                    var canister = (GameObject)PrefabUtility.InstantiatePrefab(prefab, EditorSceneManager.GetActiveScene());
+                    canister.transform.SetParent(root, true);
+                    canister.transform.position = new Vector3(at.x, y, at.z);
+                    canister.name = $"ScrapCanister ({terminal.Zone})";
+                    count++;
+                }
+            }
+            log.AppendLine($"  + {count} scrap canisters (3 per zone)");
+        }
+
+        /// Corridor floors grown by 4 m each side: the doorway areas props and Wardens must keep out of.
+        static System.Collections.Generic.List<Bounds> CorridorBlocks()
+        {
+            var blocks = new System.Collections.Generic.List<Bounds>();
+            var corridors = GameObject.Find("OVERRIDE_Greybox/Corridors");
+            if (corridors == null) return blocks;
+            foreach (Transform c in corridors.transform)
+            {
+                var f = c.Find("Floor");
+                if (f != null && f.TryGetComponent(out Collider fc))
+                {
+                    Bounds b = fc.bounds;
+                    b.Expand(new Vector3(8f, 0f, 8f));
+                    blocks.Add(b);
+                }
+            }
+            return blocks;
         }
 
         const string AmmoCratePrefab = "Assets/OVERRIDE/Prefabs/AmmoCrate.prefab";
