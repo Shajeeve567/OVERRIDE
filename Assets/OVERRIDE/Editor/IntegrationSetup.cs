@@ -16,6 +16,8 @@
 //     Ammo crates     one beside each terminal (GDD: "ammo crates at each terminal"), prefab built if missing
 //     Cameras         SecurityCameraSensor on Shajeeve's camera prefab (sightings for the Seeker)
 //     Seeker          one Seeker in Maintenance, built by HunterSetup if the prefab doesn't exist yet
+//     Wardens         Ilzam's WardenGameplay: 1 guarding the Labs terminal, 2 the Server Hall (GDD Section 5),
+//                     each with current / advance / flank / retreat cover points
 //     Game flow       pause, death + respawn, victory screens (GameFlow, Shajeeve's UI style)
 //     Debug           NoiseDebugView + ObjectivesOverlay
 //     _STANDINS       removed if present (it would add duplicate health, terminals and doors)
@@ -88,6 +90,7 @@ namespace Override.EditorTools
             log.AppendLine(HunterSetup.EnsureCameraSensors());
             log.AppendLine(HunterSetup.UpgradePrefab());
             log.AppendLine(HunterSetup.PlaceInMaintenance());
+            InstallWardens(log);
             InstallGameFlow(log);
             InstallDebug(log);
 
@@ -353,6 +356,75 @@ namespace Override.EditorTools
                 EditorUtility.SetDirty(director);
                 log.AppendLine("  + Director drone prefab = StandInDrone (swap for Rithish's Wisp when ready)");
             }
+        }
+
+        const string WardenPrefab = "Assets/_Project/Prefabs/WardenGameplay.prefab";
+
+        static void InstallWardens(System.Text.StringBuilder log)
+        {
+            if (Object.FindFirstObjectByType<WardenGameplayController>() != null) { log.AppendLine("  = Wardens already placed"); return; }
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(WardenPrefab);
+            if (prefab == null) { log.AppendLine("  ! no " + WardenPrefab + " (merge Ilzam's warden-gameplay branch)"); return; }
+
+            var director = Object.FindFirstObjectByType<DirectorController>();
+            var player = GameObject.FindWithTag("Player");
+            var root = new GameObject("OVERRIDE_Wardens").transform;
+            Undo.RegisterCreatedObjectUndo(root.gameObject, "Install Wardens");
+
+            foreach (var (zone, count) in new[] { (ZoneId.Labs, 1), (ZoneId.ServerHall, 2) })
+            {
+                HackTerminal terminal = null;
+                foreach (var t in Object.FindObjectsByType<HackTerminal>(FindObjectsSortMode.None))
+                    if (t.Zone == zone) terminal = t;
+                var floor = GameObject.Find($"OVERRIDE_Greybox/{zone}/Floor");
+                var floorCol = floor != null ? floor.GetComponent<Collider>() : null;
+                if (terminal == null || floorCol == null) { log.AppendLine($"  ! no terminal or floor for {zone}: its Wardens skipped"); continue; }
+
+                // Guard between the terminal and the room's centre, facing into the room.
+                float y = floorCol.bounds.max.y;
+                Vector3 term = new Vector3(terminal.transform.position.x, y, terminal.transform.position.z);
+                Vector3 centre = new Vector3(floorCol.bounds.center.x, y, floorCol.bounds.center.z);
+                Vector3 into = (centre - term).normalized;
+                Vector3 side = Vector3.Cross(Vector3.up, into);
+
+                for (int k = 0; k < count; k++)
+                {
+                    float lateral = (k - (count - 1) / 2f) * 7f;          // two Wardens stand 7 m apart
+                    Vector3 at = term + into * 6f + side * lateral;
+                    float flankSide = lateral < 0f ? -1f : 1f;
+
+                    var warden = (GameObject)PrefabUtility.InstantiatePrefab(prefab, EditorSceneManager.GetActiveScene());
+                    Undo.RegisterCreatedObjectUndo(warden, "Place Warden");
+                    warden.name = $"Warden ({zone}{(count > 1 ? " " + (k + 1) : "")})";
+                    warden.transform.SetParent(root, true);
+                    warden.transform.SetPositionAndRotation(at, Quaternion.LookRotation(into));
+
+                    var covers = new GameObject(warden.name + " Cover").transform;
+                    covers.SetParent(root, true);
+                    // Same cover qualities as Ilzam's integration test.
+                    var current = Cover("Current", at, 0.75f, covers);
+                    var advance = Cover("Advance", at + into * 4f, 0.85f, covers);
+                    var flank = Cover("Flank", at + side * (6f * flankSide) + into * 2f, 0.85f, covers);
+                    var retreat = Cover("Retreat", at - into * 3f, 0.70f, covers);
+
+                    var controller = warden.GetComponent<WardenGameplayController>();
+                    controller.InitializeExternalReferences(player != null ? player.transform : null, director,
+                                                            current, advance, flank, retreat);
+                    EditorUtility.SetDirty(controller);
+                    foreach (var vision in warden.GetComponentsInChildren<VisionSensor>()) EditorUtility.SetDirty(vision);
+                    log.AppendLine($"  + {warden.name} at {at}");
+                }
+            }
+        }
+
+        static WardenCoverPoint Cover(string name, Vector3 at, float quality, Transform parent)
+        {
+            var go = new GameObject("Cover - " + name);
+            go.transform.SetParent(parent, true);
+            go.transform.position = at + Vector3.up * 0.35f;
+            var point = go.AddComponent<WardenCoverPoint>();
+            point.Configure(quality);
+            return point;
         }
 
         static void InstallGameFlow(System.Text.StringBuilder log)
