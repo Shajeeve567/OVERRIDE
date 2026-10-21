@@ -12,7 +12,8 @@ namespace Override.Motor
 
         [SerializeField] private float moveSpeed = 5f;
         [SerializeField] private float rotationSpeed = 10f;
-        [SerializeField] private float fireInterval = 1f;
+        [SerializeField] private float hoverHeight = 2.5f;
+        [SerializeField] private float fireInterval = 0.33f;
         [SerializeField] private float fireDamage = 6f;
         [SerializeField] private Transform shootOrigin;
         [SerializeField] private bool canShoot = false;
@@ -22,12 +23,21 @@ namespace Override.Motor
         private Transform playerTransform;
         private WispVisuals visuals;
 
+        private const float StuckTimeout = 3f;
+        private const float StuckDistanceEpsilon = 0.05f;
+        private const int PathProbeCapacity = 16;
+
+        private static readonly RaycastHit[] pathProbeHits = new RaycastHit[PathProbeCapacity];
+
         private int currentPathIndex = 0;
         private Vector3 lastPathFirstNode = Vector3.zero;
 
+        private Vector3 lastStuckTarget;
+        private float bestDistanceToTarget = float.PositiveInfinity;
+        private float stuckTimer;
+
         private float nextFireTime = 0f;
 
-        // [Integration] A short visible beam for each shot (it used to be a Scene-view debug line only).
         [SerializeField] private Color beamColour = new Color(0.3f, 0.9f, 1f, 0.9f);
         [SerializeField] private float beamSeconds = 0.08f;
         private LineRenderer beam;
@@ -39,6 +49,8 @@ namespace Override.Motor
             controller = GetComponent<CharacterController>();
             brain = GetComponent<IAgentBrain>();
             visuals = GetComponentInChildren<WispVisuals>(true);
+
+            if (Mathf.Approximately(fireInterval, 1f)) fireInterval = 0.33f;
             if (canShoot) CreateBeam();
         }
 
@@ -102,17 +114,37 @@ namespace Override.Motor
                     currentPathIndex = command.Path.Length - 1;
                 }
 
-                Vector3 targetPoint = command.Path[currentPathIndex];
-
-                Vector3 direction = targetPoint - transform.position;
-                direction.y = 0;
-                direction = direction.normalized;
-
-                controller.Move(direction * moveSpeed * Time.deltaTime);
-
-                if (direction != Vector3.zero)
+                while (currentPathIndex < command.Path.Length - 1 &&
+                       HasClearPathTo(command.Path[currentPathIndex + 1]))
                 {
-                    Quaternion targetRotation = Quaternion.LookRotation(direction);
+                    currentPathIndex++;
+                }
+
+                Vector3 targetPoint = command.Path[currentPathIndex];
+                Vector3 toTarget = targetPoint - transform.position;
+                Vector3 planarDirection = new Vector3(toTarget.x, 0f, toTarget.z);
+                float planarDistance = planarDirection.magnitude;
+
+                if (planarDistance > 0.001f)
+                {
+                    planarDirection /= planarDistance;
+                }
+                else
+                {
+                    planarDirection = Vector3.zero;
+                }
+
+                float verticalSpeed = Mathf.Clamp(
+                    (hoverHeight - transform.position.y) * 2f,
+                    -moveSpeed,
+                    moveSpeed);
+                Vector3 velocity = planarDirection * moveSpeed + Vector3.up * verticalSpeed;
+
+                controller.Move(velocity * Time.deltaTime);
+
+                if (planarDirection != Vector3.zero)
+                {
+                    Quaternion targetRotation = Quaternion.LookRotation(planarDirection);
                     transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
                 }
 
@@ -120,12 +152,40 @@ namespace Override.Motor
                     new Vector3(transform.position.x, 0, transform.position.z),
                     new Vector3(targetPoint.x, 0, targetPoint.z));
 
-                if (distanceToTarget < 1.5f)
+                if (!command.Fire)
                 {
-                    if (currentPathIndex < command.Path.Length - 1)
+                    if ((targetPoint - lastStuckTarget).sqrMagnitude > 0.25f)
                     {
-                        currentPathIndex++;
+                        lastStuckTarget = targetPoint;
+                        bestDistanceToTarget = float.PositiveInfinity;
+                        stuckTimer = 0f;
                     }
+
+                    if (distanceToTarget < bestDistanceToTarget - StuckDistanceEpsilon)
+                    {
+                        bestDistanceToTarget = distanceToTarget;
+                        stuckTimer = 0f;
+                    }
+                    else
+                    {
+                        stuckTimer += Time.deltaTime;
+
+                        if (stuckTimer >= StuckTimeout)
+                        {
+                            Destroy(gameObject);
+                            return;
+                        }
+                    }
+                }
+                else
+                {
+                    stuckTimer = 0f;
+                    bestDistanceToTarget = float.PositiveInfinity;
+                }
+
+                if (distanceToTarget < 1.5f && currentPathIndex < command.Path.Length - 1)
+                {
+                    currentPathIndex++;
                 }
             }
 
@@ -142,9 +202,42 @@ namespace Override.Motor
             }
         }
 
-        // [Integration] Aims at the player's chest from the Wisp's centre (it used to aim at the feet from
-        // above the Wisp, so the floor or any prop near the feet stopped the shot). Other agents in the way
-        // are ignored; anything else that blocks the shot is logged.
+        private bool HasClearPathTo(Vector3 point)
+        {
+            Vector3 delta = point - transform.position;
+            float distance = delta.magnitude;
+
+            if (distance < 0.001f) return true;
+
+            float radius = controller != null ? Mathf.Max(0.1f, controller.radius * 0.9f) : 0.45f;
+            int hitCount = Physics.SphereCastNonAlloc(
+                transform.position,
+                radius,
+                delta / distance,
+                pathProbeHits,
+                distance,
+                ~0,
+                QueryTriggerInteraction.Ignore);
+
+            for (int i = 0; i < hitCount; i++)
+            {
+                RaycastHit hit = pathProbeHits[i];
+                if (hit.collider == null) continue;
+
+                if (hit.transform.root == transform.root) continue;
+
+                bool isPlayer = hit.transform.CompareTag("Player") ||
+                                hit.transform.root.CompareTag("Player");
+                if (isPlayer) continue;
+
+                if (hit.collider.GetComponentInParent<IDamageable>() != null) continue;
+
+                return false;
+            }
+
+            return true;
+        }
+
         private void ShootPlayer()
         {
             if (playerTransform == null) return;
@@ -173,7 +266,7 @@ namespace Override.Motor
 
                 if (!isPlayer)
                 {
-                    if (damageable != null) continue;   // another agent (Wisp, Warden, Seeker) in the way
+                    if (damageable != null) continue;
                     beamEnd = hit.point;
                     Debug.Log("[Wisp] Shot blocked by " + hit.collider.name);
                     break;
