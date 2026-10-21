@@ -10,12 +10,16 @@ namespace Override.AI
     public class PathfinderBrain : MonoBehaviour, IAgentBrain, IDirectorDrone
     {
         private const float AttackRange = 15f;
+        private const float BayExitRadius = 1.5f;
         private const int LineOfSightHitCapacity = 32;
 
         [SerializeField] private bool allowDirectChaseFallback = true;
 
         private WispVisuals wispVisuals;
         private CharacterController playerController;
+
+        private bool isLeavingBay;
+        private Vector3 bayExitWaypoint;
 
         private static readonly RaycastHit[] lineOfSightHits = new RaycastHit[LineOfSightHitCapacity];
 
@@ -41,6 +45,8 @@ namespace Override.AI
 
             currentPath.Add(waypoint);
             lastPathTime = Time.time;
+            bayExitWaypoint = waypoint;
+            isLeavingBay = true;
 
             if (wispVisuals == null) wispVisuals = GetComponentInChildren<WispVisuals>(true);
             if (wispVisuals != null) wispVisuals.PlaySpawn();
@@ -78,6 +84,32 @@ namespace Override.AI
             lastPlayerPosition = snapshot.PlayerPosition;
             lastPlayerForward = snapshot.PlayerForward;
             HandleDebugToggle();
+
+            if (isLeavingBay)
+            {
+                Vector3 exitOffset = bayExitWaypoint - transform.position;
+                exitOffset.y = 0f;
+
+                if (exitOffset.sqrMagnitude <= BayExitRadius * BayExitRadius)
+                {
+                    isLeavingBay = false;
+                    currentPath.Clear();
+                    lastPathTime = -999f;
+                }
+                else
+                {
+                    AgentCommand exitCommand = new AgentCommand
+                    {
+                        Path = new Vector3[] { bayExitWaypoint },
+                        LookTarget = bayExitWaypoint,
+                        Fire = false,
+                        AnimationIntent = "Hover"
+                    };
+
+                    DrawCurrentPath();
+                    return exitCommand;
+                }
+            }
 
             AgentCommand cmd = new AgentCommand();
             float distToPlayer = Vector3.Distance(transform.position, snapshot.PlayerPosition);
