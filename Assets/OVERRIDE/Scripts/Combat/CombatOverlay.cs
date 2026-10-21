@@ -1,9 +1,11 @@
 // CombatOverlay.cs
 // Temporary combat feedback drawn with IMGUI until the real HUD (feature/game-flow) replaces it:
 // crosshair, hit marker (white), kill marker (red, bigger), red damage flash,
-// health and ammo text. Put it on the Player.
+// health and ammo text, and the "spotted" warning (red screen edges) while a security camera sees you.
+// Put it on the Player.
 
 using Override.Core;
+using Override.Hunter;
 using UnityEngine;
 
 namespace Override.Combat
@@ -16,11 +18,13 @@ namespace Override.Combat
         [SerializeField] float markerTime = 0.15f;
         [SerializeField] float killMarkerTime = 0.4f;
         [SerializeField] float damageFlashTime = 0.25f;
+        [SerializeField] float spottedTime = 0.8f;   // cameras report twice a second, so this stays lit while seen
 
         float markerUntil;
         bool markerWasKill;
         bool markerWasWeak;
         float damageFlashUntil;
+        float spottedUntil;
         string ammoText = "";
         string healthText = "";
 
@@ -34,6 +38,7 @@ namespace Override.Combat
                 rifle.ReloadCancelled += RefreshAmmo;
             }
             GameEvents.PlayerDamaged += OnPlayerDamaged;
+            CameraNetwork.Sighted += OnSpotted;
             if (playerHealth != null) playerHealth.Healed += RefreshHealth;
         }
 
@@ -47,6 +52,7 @@ namespace Override.Combat
                 rifle.ReloadCancelled -= RefreshAmmo;
             }
             GameEvents.PlayerDamaged -= OnPlayerDamaged;
+            CameraNetwork.Sighted -= OnSpotted;
             if (playerHealth != null) playerHealth.Healed -= RefreshHealth;
         }
 
@@ -63,6 +69,8 @@ namespace Override.Combat
             markerWasWeak = shot.WeakPoint;
             markerUntil = Time.time + (shot.Kill ? killMarkerTime : markerTime);
         }
+
+        void OnSpotted(Vector3 at) => spottedUntil = Time.time + spottedTime;
 
         void OnPlayerDamaged(float amount)
         {
@@ -87,6 +95,20 @@ namespace Override.Combat
             {
                 GUI.color = new Color(1f, 0f, 0f, 0.35f * flash);
                 GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), white);
+            }
+
+            // Spotted: red bars on all four screen edges and ARGUS's line (GDD "you've been spotted" feedback).
+            if (Time.time < spottedUntil)
+            {
+                float pulse = 0.35f + 0.25f * Mathf.Sin(Time.time * 12f);
+                GUI.color = new Color(1f, 0.1f, 0.05f, pulse);
+                const float edge = 14f;
+                GUI.DrawTexture(new Rect(0, 0, Screen.width, edge), white);
+                GUI.DrawTexture(new Rect(0, Screen.height - edge, Screen.width, edge), white);
+                GUI.DrawTexture(new Rect(0, 0, edge, Screen.height), white);
+                GUI.DrawTexture(new Rect(Screen.width - edge, 0, edge, Screen.height), white);
+                GUI.color = new Color(1f, 0.25f, 0.2f, 1f);
+                GUI.Label(new Rect(cx - 120f, 80f, 240f, 24f), "ARGUS: TARGET ACQUIRED");
             }
 
             // Crosshair: four ticks.
