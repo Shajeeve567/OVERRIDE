@@ -183,9 +183,8 @@ namespace Override.Combat
                 var health = hit.collider.GetComponentInParent<Health>();
                 bool wasAlive = health != null && !health.IsDead;
 
-                // Two kinds of weak point: our Hitbox applies its own multiplier when it forwards the hit;
-                // Ilzam's WardenWeakPoint (generated onto his Warden model) only marks the collider, so
-                // the multiplier is applied here.
+                // Our Hitbox applies its own multiplier when it forwards the hit; Ilzam's WardenWeakPoint
+                // and SeekerWeakPoint (on his models) only mark the collider, so their multiplier is applied here.
                 float amount = damage;
                 bool weak = false;
                 if (hit.collider.TryGetComponent(out Hitbox hitbox)) weak = hitbox.IsWeakPoint;
@@ -193,6 +192,11 @@ namespace Override.Combat
                 {
                     amount = wardenWeakPoint.ScaleDamage(damage);
                     weak = wardenWeakPoint.DamageMultiplier > 1f;
+                }
+                else if (hit.collider.TryGetComponent(out SeekerWeakPoint seekerWeakPoint))   // Ilzam's Seeker model
+                {
+                    amount = seekerWeakPoint.ScaleDamage(damage);
+                    weak = seekerWeakPoint.DamageMultiplier > 1f;
                 }
 
                 target.TakeDamage(amount, hit.point, hit.normal);
