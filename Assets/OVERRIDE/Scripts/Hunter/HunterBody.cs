@@ -53,6 +53,7 @@ namespace Override.Hunter
 
         HunterBrain brain;
         Rigidbody body;
+        SeekerVisuals seekerVisuals;   // Rithish's procedural animation; when present it drives the visual
         float floorTop;
 
         // Senses, filled between ticks and cleared after each one.
@@ -93,6 +94,7 @@ namespace Override.Hunter
         public float FloorTop => floorTop;
         public double LastTickMilliseconds { get; private set; }
         public Vector3[] CurrentPath => followingPath;
+        public AgentCommand CurrentCommand => command;
         public float HoverHeight => hoverHeight;
 
         // ---------------------------------------------------------------- IHunterSenses
@@ -141,6 +143,7 @@ namespace Override.Hunter
         void Awake()
         {
             body = GetComponent<Rigidbody>();
+            seekerVisuals = GetComponent<SeekerVisuals>();
             body.isKinematic = true;
             body.useGravity = false;
             body.interpolation = RigidbodyInterpolation.Interpolate;
@@ -350,7 +353,7 @@ namespace Override.Hunter
 
         void LateUpdate()
         {
-            if (visual == null) return;
+            if (visual == null || seekerVisuals != null) return;
             Vector3 bob = Vector3.up * (Mathf.Sin(Time.time * bobFrequency * 2f * Mathf.PI) * bobAmplitude);
             // Lunge: dart forward and back along the facing direction (the Seeker faces the player in contact).
             float t = (Time.time - lungeStart) / lungeSeconds;
