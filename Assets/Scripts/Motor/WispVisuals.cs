@@ -34,6 +34,17 @@ namespace Override.Motor
         public float hurtDuration = 0.15f;
         public float hurtShake = 0.06f;
 
+        [Header("Death Animation")]
+        public float deathDuration = 0.6f;
+        public float deathScale = 0.35f;
+        public float deathTilt = 35f;
+
+        [Header("Hover Audio")]
+        [SerializeField] private AudioSource hoverAudio;
+        [SerializeField] private float hoverHumVolume = 0.08f;
+        [SerializeField] private float hoverHumMinDistance = 2f;
+        [SerializeField] private float hoverHumMaxDistance = 20f;
+
         [Header("Optional FX")]
         [SerializeField] private TrailRenderer trail;
         [SerializeField] private Light glowLight;
@@ -50,9 +61,12 @@ namespace Override.Motor
         private float currentLean;
         private float currentRoll;
 
+        private static AudioClip hoverHumClip;
+
         private float spawnTimer = -1f;
         private float attackTimer = -1f;
         private float hurtTimer = -1f;
+        private float deathTimer = -1f;
         private bool isDead;
         private bool isCulled;
 
@@ -70,6 +84,7 @@ namespace Override.Motor
 
             meshRenderers = GetComponentsInChildren<MeshRenderer>(true);
             EnsureWispIsHittable();
+            EnsureHoverAudio();
         }
 
         private void Start()
@@ -165,6 +180,14 @@ namespace Override.Motor
                 if (t >= 1f) hurtTimer = -1f;
             }
 
+            if (deathTimer >= 0f)
+            {
+                deathTimer += dt;
+                float t = Mathf.Clamp01(deathTimer / Mathf.Max(0.01f, deathDuration));
+                scale *= Mathf.Lerp(1f, deathScale, t);
+                pitch += deathTilt * t;
+            }
+
             pitch += currentLean;
 
             transform.localPosition = baseLocalPosition + offset;
@@ -178,6 +201,9 @@ namespace Override.Motor
         {
             if (isDead) return;
             spawnTimer = 0f;
+            deathTimer = -1f;
+
+            if (hoverAudio != null && !hoverAudio.isPlaying) hoverAudio.Play();
         }
 
         public void PlayAttack()
@@ -194,10 +220,15 @@ namespace Override.Motor
 
         public void PlayDeath()
         {
+            if (isDead) return;
+
             isDead = true;
             spawnTimer = -1f;
             attackTimer = -1f;
             hurtTimer = -1f;
+            deathTimer = 0f;
+
+            StopHoverAudio();
         }
 
         public void SetVisible(bool visible)
@@ -215,6 +246,12 @@ namespace Override.Motor
             {
                 glowLight.enabled = visible;
             }
+
+            if (hoverAudio != null && !isDead)
+            {
+                if (visible && !hoverAudio.isPlaying) hoverAudio.Play();
+                hoverAudio.mute = !visible;
+            }
         }
 
         private void UpdateGlow()
@@ -231,7 +268,62 @@ namespace Override.Motor
                 spawnBoost = (1f - t) * glowAttackIntensity * 0.6f;
             }
 
-            glowLight.intensity = glowBaseIntensity * pulse + attackBoost + spawnBoost;
+            float deathFade = deathTimer >= 0f
+                ? 1f - Mathf.Clamp01(deathTimer / Mathf.Max(0.01f, deathDuration))
+                : 1f;
+
+            glowLight.intensity = (glowBaseIntensity * pulse + attackBoost + spawnBoost) * deathFade;
+        }
+
+        private void EnsureHoverAudio()
+        {
+            if (hoverAudio == null) hoverAudio = GetComponent<AudioSource>();
+            if (hoverAudio == null) hoverAudio = gameObject.AddComponent<AudioSource>();
+
+            if (hoverAudio.clip == null)
+            {
+                if (hoverHumClip == null) hoverHumClip = CreateHoverHumClip();
+                hoverAudio.clip = hoverHumClip;
+            }
+
+            hoverAudio.loop = true;
+            hoverAudio.playOnAwake = false;
+            hoverAudio.spatialBlend = 1f;
+            hoverAudio.volume = hoverHumVolume;
+            hoverAudio.minDistance = hoverHumMinDistance;
+            hoverAudio.maxDistance = hoverHumMaxDistance;
+            hoverAudio.rolloffMode = AudioRolloffMode.Linear;
+            hoverAudio.dopplerLevel = 0f;
+
+            if (!isDead && !hoverAudio.isPlaying) hoverAudio.Play();
+        }
+
+        private void StopHoverAudio()
+        {
+            if (hoverAudio == null) return;
+
+            hoverAudio.mute = false;
+            hoverAudio.Stop();
+        }
+
+        private static AudioClip CreateHoverHumClip()
+        {
+            const int sampleRate = 44100;
+            const int sampleCount = sampleRate;
+            float[] samples = new float[sampleCount];
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                float t = (float)i / sampleRate;
+                float tone = Mathf.Sin(2f * Mathf.PI * 110f * t) * 0.55f +
+                             Mathf.Sin(2f * Mathf.PI * 220f * t) * 0.2f;
+                float pulse = 0.75f + Mathf.Sin(2f * Mathf.PI * 2f * t) * 0.25f;
+                samples[i] = tone * pulse * 0.45f;
+            }
+
+            AudioClip clip = AudioClip.Create("WispHoverHum", sampleCount, 1, sampleRate, false);
+            clip.SetData(samples, 0);
+            return clip;
         }
 
         private void EnsureWispIsHittable()

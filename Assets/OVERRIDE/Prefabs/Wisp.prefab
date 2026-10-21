@@ -49,7 +49,29 @@ MonoBehaviour:
   hoverFrequency: 2
   bankAmount: 15
   bankSpeed: 5
+  leanAmount: 12
+  leanSpeed: 6
+  referenceSpeed: 5
   cullDistance: 30
+  spawnDuration: 0.35
+  spawnStartScale: 0.15
+  attackDuration: 0.18
+  attackRecoil: 0.25
+  attackPitch: 10
+  attackScalePulse: 0.08
+  hurtDuration: 0.15
+  hurtShake: 0.06
+  deathDuration: 0.6
+  deathScale: 0.35
+  deathTilt: 35
+  hoverAudio: {fileID: 0}
+  hoverHumVolume: 0.08
+  hoverHumMinDistance: 2
+  hoverHumMaxDistance: 20
+  trail: {fileID: 0}
+  glowLight: {fileID: 0}
+  glowBaseIntensity: 0.8
+  glowAttackIntensity: 2
 --- !u!1 &9046111009816651469
 GameObject:
   m_ObjectHideFlags: 0
@@ -126,10 +148,14 @@ MonoBehaviour:
   isDead: 0
   moveSpeed: 5
   rotationSpeed: 10
-  fireInterval: 1
+  hoverHeight: 2.5
+  fireInterval: 0.75
   fireDamage: 6
   shootOrigin: {fileID: 0}
   canShoot: 1
+  isFlying: 1
+  beamColour: {r: 0.3, g: 0.9, b: 1, a: 0.9}
+  beamSeconds: 0.08
 --- !u!114 &659628786622039142
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -142,6 +168,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7ca9d2b227465434ab4f7dc7fb126cb1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Override.AI.PathfinderBrain
+  allowDirectChaseFallback: 1
 --- !u!114 &7993471554151665822
 MonoBehaviour:
   m_ObjectHideFlags: 0
