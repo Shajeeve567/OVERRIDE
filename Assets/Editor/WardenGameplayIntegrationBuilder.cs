@@ -171,6 +171,10 @@ public static class WardenGameplayIntegrationBuilder
 
         EditorUtility.SetDirty(warden);
         EditorUtility.SetDirty(controller);
+
+        const string prefabPath = "Assets/_Project/Prefabs/WardenGameplay.prefab";
+        PrefabUtility.SaveAsPrefabAsset(warden, prefabPath);
+        Debug.Log("[Warden Gameplay] Exported standalone gameplay prefab: " + prefabPath);
     }
 
     private static WardenCoverPoint CreateCoverPoint(
