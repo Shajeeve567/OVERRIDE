@@ -13,10 +13,11 @@ namespace Override.Motor
         [SerializeField] private float moveSpeed = 5f;
         [SerializeField] private float rotationSpeed = 10f;
         [SerializeField] private float hoverHeight = 2.5f;
-        [SerializeField] private float fireInterval = 0.33f;
+        [SerializeField] private float fireInterval = 1f;
         [SerializeField] private float fireDamage = 6f;
         [SerializeField] private Transform shootOrigin;
         [SerializeField] private bool canShoot = false;
+        [SerializeField] private bool isFlying = false;
 
         private IAgentBrain brain;
         private CharacterController controller;
@@ -58,7 +59,6 @@ namespace Override.Motor
                 controller.skinWidth = 0.04f;
             }
 
-            if (Mathf.Approximately(fireInterval, 1f)) fireInterval = 0.33f;
             if (canShoot) CreateBeam();
         }
 
@@ -143,14 +143,19 @@ namespace Override.Motor
                     planarDirection = Vector3.zero;
                 }
 
-                float desiredHeight = isExitingBay
-                    ? Mathf.Min(transform.position.y, hoverHeight)
-                    : hoverHeight;
-                float verticalSpeed = Mathf.Clamp(
-                    (desiredHeight - transform.position.y) * 2f,
-                    -moveSpeed,
-                    moveSpeed);
-                Vector3 velocity = planarDirection * moveSpeed + Vector3.up * verticalSpeed;
+                Vector3 velocity = planarDirection * moveSpeed;
+
+                if (isFlying)
+                {
+                    float desiredHeight = isExitingBay
+                        ? Mathf.Min(transform.position.y, hoverHeight)
+                        : hoverHeight;
+                    float verticalSpeed = Mathf.Clamp(
+                        (desiredHeight - transform.position.y) * 2f,
+                        -moveSpeed,
+                        moveSpeed);
+                    velocity += Vector3.up * verticalSpeed;
+                }
 
                 controller.Move(velocity * Time.deltaTime);
 
@@ -164,29 +169,46 @@ namespace Override.Motor
                     new Vector3(transform.position.x, 0, transform.position.z),
                     new Vector3(targetPoint.x, 0, targetPoint.z));
 
-                if (!command.Fire && !isExitingBay)
+                if (isFlying)
                 {
-                    if ((targetPoint - lastStuckTarget).sqrMagnitude > 0.25f)
+                    if (!command.Fire && !isExitingBay)
                     {
-                        lastStuckTarget = targetPoint;
-                        bestDistanceToTarget = float.PositiveInfinity;
-                        stuckTimer = 0f;
-                    }
+                        if ((targetPoint - lastStuckTarget).sqrMagnitude > 0.25f)
+                        {
+                            lastStuckTarget = targetPoint;
+                            bestDistanceToTarget = float.PositiveInfinity;
+                            stuckTimer = 0f;
+                        }
 
-                    if (distanceToTarget < bestDistanceToTarget - StuckDistanceEpsilon)
-                    {
-                        bestDistanceToTarget = distanceToTarget;
-                        stuckTimer = 0f;
+                        if (distanceToTarget < bestDistanceToTarget - StuckDistanceEpsilon)
+                        {
+                            bestDistanceToTarget = distanceToTarget;
+                            stuckTimer = 0f;
+                        }
+                        else
+                        {
+                            stuckTimer += Time.deltaTime;
+
+                            if (stuckTimer >= StuckTimeout)
+                            {
+                                WispHealth health = GetComponent<WispHealth>();
+                                if (health != null)
+                                {
+                                    health.TakeDamage(999f);
+                                }
+                                else
+                                {
+                                    Destroy(gameObject);
+                                }
+
+                                return;
+                            }
+                        }
                     }
                     else
                     {
-                        stuckTimer += Time.deltaTime;
-
-                        if (stuckTimer >= StuckTimeout)
-                        {
-                            Destroy(gameObject);
-                            return;
-                        }
+                        stuckTimer = 0f;
+                        bestDistanceToTarget = float.PositiveInfinity;
                     }
                 }
                 else
@@ -280,13 +302,11 @@ namespace Override.Motor
                 {
                     if (damageable != null) continue;
                     beamEnd = hit.point;
-                    Debug.Log("[Wisp] Shot blocked by " + hit.collider.name);
                     break;
                 }
 
                 beamEnd = hit.point;
                 if (damageable != null) damageable.TakeDamage(fireDamage, hit.point, -hit.normal);
-                Debug.Log("[Wisp] Hit the player for " + fireDamage + " damage!");
                 break;
             }
 
