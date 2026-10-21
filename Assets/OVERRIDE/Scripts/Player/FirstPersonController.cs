@@ -67,6 +67,9 @@ namespace Override.Player
 
         /// Other systems (crate pushing, menus, death) can cap speed or freeze input.
         public float SpeedCap { get; set; } = float.PositiveInfinity;
+        /// Scales movement and look speed, e.g. while aiming down sights.
+        public float SpeedMultiplier { get; set; } = 1f;
+        public float LookMultiplier { get; set; } = 1f;
         public bool InputEnabled { get; set; } = true;
 
         /// Camera pitch offset added by weapon recoil (degrees, positive = up).
@@ -99,7 +102,7 @@ namespace Override.Player
 
         void Look()
         {
-            Vector2 delta = input.LookDelta * mouseSensitivity;
+            Vector2 delta = input.LookDelta * (mouseSensitivity * LookMultiplier);
             transform.Rotate(0f, delta.x, 0f);                    // yaw turns the whole body
             pitch = Mathf.Clamp(pitch - delta.y, -pitchClamp, pitchClamp);
             if (cameraRoot != null)
@@ -155,7 +158,7 @@ namespace Override.Player
                 MovementMode.Sprint => sprintSpeed,
                 _ => walkSpeed,
             };
-            targetSpeed = Mathf.Min(targetSpeed, SpeedCap);
+            targetSpeed = Mathf.Min(targetSpeed * SpeedMultiplier, SpeedCap);
 
             Vector3 wishDir = transform.right * moveInput.x + transform.forward * moveInput.y;
             if (wishDir.sqrMagnitude > 1f) wishDir.Normalize();   // diagonals aren't faster

@@ -14,13 +14,14 @@ namespace Override.Player
 {
     public class PlayerInputReader : MonoBehaviour
     {
-        InputAction move, look, fire, reload, interact, throwAction, sprint, crouch, jump,
+        InputAction move, look, fire, aim, reload, interact, throwAction, sprint, crouch, jump,
                     weapon1, weapon2, debugOverlay, pause;
 
         public Vector2 Move => move.ReadValue<Vector2>();
         public Vector2 LookDelta => look.ReadValue<Vector2>();   // pixels moved this frame
 
         public bool FireHeld => fire.IsPressed();
+        public bool AimHeld => aim.IsPressed();
         public bool SprintHeld => sprint.IsPressed();
         public bool CrouchHeld => crouch.IsPressed();
         public bool InteractHeld => interact.IsPressed();
@@ -48,6 +49,7 @@ namespace Override.Player
 
             look = new InputAction("Look", InputActionType.Value, "<Mouse>/delta");
             fire = new InputAction("Fire", InputActionType.Button, "<Mouse>/leftButton");
+            aim = new InputAction("Aim", InputActionType.Button, "<Mouse>/rightButton");   // hold to aim down sights
             reload = new InputAction("Reload", InputActionType.Button, "<Keyboard>/r");
             interact = new InputAction("Interact", InputActionType.Button, "<Keyboard>/e");
             throwAction = new InputAction("Throw", InputActionType.Button, "<Keyboard>/g");
@@ -88,7 +90,7 @@ namespace Override.Player
 
         InputAction[] All() => new[]
         {
-            move, look, fire, reload, interact, throwAction, sprint, crouch, jump,
+            move, look, fire, aim, reload, interact, throwAction, sprint, crouch, jump,
             weapon1, weapon2, debugOverlay, pause,
         };
     }

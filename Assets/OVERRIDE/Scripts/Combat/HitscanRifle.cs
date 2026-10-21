@@ -47,6 +47,12 @@ namespace Override.Combat
         [SerializeField] float spreadMoving = 2f;
         [SerializeField] float movingSpeed = 0.5f;     // m/s above which "moving" spread applies
 
+        [Header("Aim down sights (GDD nice-to-have, right mouse)")]
+        [SerializeField] float spreadAiming = 0.2f;    // degrees, standing still; doubled while moving
+        [SerializeField] float aimRecoilScale = 0.6f;  // braced against the shoulder: less kick
+        [SerializeField] float aimMoveScale = 0.6f;    // walk slower while aiming
+        [SerializeField] float aimLookScale = 0.6f;    // finer mouse look while zoomed in
+
         [Header("Recoil (starting values)")]
         [SerializeField] float recoilPitch = 1f;       // degrees up per shot
         [SerializeField] float recoilYaw = 0.3f;       // random ± degrees per shot
@@ -72,6 +78,7 @@ namespace Override.Combat
         public int Reserve { get; private set; }
         public int MagazineSize => magazineSize;
         public bool IsReloading { get; private set; }
+        public bool IsAiming { get; private set; }
         public float ReloadTime => reloadTime;
         /// 0 to 1 while reloading, otherwise 0.
         public float ReloadProgress => IsReloading ? 1f - Mathf.Clamp01((reloadEndTime - Time.time) / reloadTime) : 0f;
@@ -104,6 +111,8 @@ namespace Override.Combat
         {
             if (carry != null) carry.Thrown -= CancelReload;
             CancelReload();
+            IsAiming = false;
+            if (controller != null) { controller.SpeedMultiplier = 1f; controller.LookMultiplier = 1f; }
         }
 
         void Start() => AmmoChanged?.Invoke();
@@ -113,6 +122,7 @@ namespace Override.Combat
             RecoverRecoil();
 
             if (IsReloading && Time.time >= reloadEndTime) FinishReload();
+            UpdateAiming();
             if (!controller.InputEnabled) return;
 
             if (input.ReloadPressed) StartReload();
@@ -129,6 +139,14 @@ namespace Override.Combat
                 }
             }
             triggerWasHeld = held;
+        }
+
+        void UpdateAiming()
+        {
+            IsAiming = controller.InputEnabled && input.AimHeld && !controller.IsSprinting && !IsReloading
+                       && (carry == null || !carry.IsCarrying);
+            controller.SpeedMultiplier = IsAiming ? aimMoveScale : 1f;
+            controller.LookMultiplier = IsAiming ? aimLookScale : 1f;
         }
 
         bool CanFire() =>
@@ -157,7 +175,8 @@ namespace Override.Combat
         {
             Vector3 v = controller.Velocity;
             bool moving = new Vector2(v.x, v.z).magnitude > movingSpeed;
-            float spread = moving ? spreadMoving : spreadStill;
+            float spread = IsAiming ? spreadAiming * (moving ? 2f : 1f)
+                         : moving ? spreadMoving : spreadStill;
 
             // A random point inside a circle, at the size of the spread cone one metre ahead.
             Vector2 r = UnityEngine.Random.insideUnitCircle * Mathf.Tan(spread * Mathf.Deg2Rad);
@@ -217,8 +236,9 @@ namespace Override.Combat
 
         void ApplyRecoil()
         {
-            controller.RecoilPitch += recoilPitch;
-            transform.Rotate(0f, UnityEngine.Random.Range(-recoilYaw, recoilYaw), 0f);
+            float scale = IsAiming ? aimRecoilScale : 1f;
+            controller.RecoilPitch += recoilPitch * scale;
+            transform.Rotate(0f, UnityEngine.Random.Range(-recoilYaw, recoilYaw) * scale, 0f);
         }
 
         void RecoverRecoil()

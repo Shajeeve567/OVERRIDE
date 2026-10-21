@@ -111,13 +111,18 @@ namespace Override.Combat
                 GUI.Label(new Rect(cx - 120f, 80f, 240f, 24f), "ARGUS: TARGET ACQUIRED");
             }
 
-            // Crosshair: four ticks.
+            // Crosshair: four ticks at the hip, a small dot while aiming down sights.
             GUI.color = new Color(1f, 1f, 1f, 0.85f);
-            const float gap = 6f, len = 8f, thick = 2f;
-            GUI.DrawTexture(new Rect(cx - gap - len, cy - thick / 2, len, thick), white);
-            GUI.DrawTexture(new Rect(cx + gap, cy - thick / 2, len, thick), white);
-            GUI.DrawTexture(new Rect(cx - thick / 2, cy - gap - len, thick, len), white);
-            GUI.DrawTexture(new Rect(cx - thick / 2, cy + gap, thick, len), white);
+            if (rifle != null && rifle.IsAiming)
+                GUI.DrawTexture(new Rect(cx - 1.5f, cy - 1.5f, 3f, 3f), white);
+            else
+            {
+                const float gap = 6f, len = 8f, thick = 2f;
+                GUI.DrawTexture(new Rect(cx - gap - len, cy - thick / 2, len, thick), white);
+                GUI.DrawTexture(new Rect(cx + gap, cy - thick / 2, len, thick), white);
+                GUI.DrawTexture(new Rect(cx - thick / 2, cy - gap - len, thick, len), white);
+                GUI.DrawTexture(new Rect(cx - thick / 2, cy + gap, thick, len), white);
+            }
 
             // Hit marker: an X; red and larger on a kill, yellow on a weak point.
             if (Time.time < markerUntil)

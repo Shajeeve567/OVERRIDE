@@ -1,6 +1,6 @@
 // WeaponMotion.cs
-// Procedural first-person gun motion: recoil kick, look sway, walk bob, a lowered sprint pose and a
-// reload dip. All computed in code from the player's state, so no rig or animation files are needed
+// Procedural first-person gun motion: recoil kick, look sway, walk bob, a lowered sprint pose, a
+// reload dip, and aiming down sights (gun to the centre, camera zoom). All computed in code from the player's state, so no rig or animation files are needed
 // (GDD: "procedural, in code"). Put it on GunPivot, the empty that holds the gun model under the camera.
 
 using Override.Player;
@@ -33,6 +33,13 @@ namespace Override.Combat
         [SerializeField] Vector3 sprintRotation = new Vector3(10f, -25f, 5f);
         [SerializeField] float poseSmooth = 8f;
 
+        [Header("Aim down sights")]
+        [Tooltip("Where GunPivot moves while aiming (local to the camera): centred, just under the eye line.")]
+        [SerializeField] Vector3 aimPosition = new Vector3(0f, -0.12f, 0.3f);
+        [SerializeField] float aimFieldOfView = 42f;    // degrees; the hip view is the camera's own FOV
+        [SerializeField] float aimSmooth = 14f;
+        [SerializeField] float aimSwayScale = 0.25f;     // sway and bob shrink to this while aiming
+
         [Header("Reload dip")]
         [SerializeField] float reloadDrop = 0.12f;      // metres down at the middle of the reload
         [SerializeField] float reloadRoll = 30f;        // degrees tilted
@@ -44,15 +51,24 @@ namespace Override.Combat
         Vector2 sway;            // current look sway (degrees)
         float bobPhase;
         float sprintBlend;       // 0 = ready, 1 = fully lowered
+        float aimBlend;          // 0 = hip, 1 = fully aimed
+        Camera viewCamera;
+        float hipFieldOfView;
 
         void Awake()
         {
             basePosition = transform.localPosition;
             baseRotation = transform.localRotation;
+            viewCamera = GetComponentInParent<Camera>();
+            if (viewCamera != null) hipFieldOfView = viewCamera.fieldOfView;
         }
 
         void OnEnable() { if (rifle != null) rifle.Fired += OnFired; }
-        void OnDisable() { if (rifle != null) rifle.Fired -= OnFired; }
+        void OnDisable()
+        {
+            if (rifle != null) rifle.Fired -= OnFired;
+            if (viewCamera != null) viewCamera.fieldOfView = hipFieldOfView;   // never leave the view zoomed
+        }
 
         void OnFired(ShotResult _) => kick = Mathf.Min(kick + 1f, 2f);
 
@@ -78,18 +94,24 @@ namespace Override.Combat
             // Sprint: blend into a lowered pose (you can't fire while sprinting, so show it).
             sprintBlend = Mathf.Lerp(sprintBlend, controller.IsSprinting ? 1f : 0f, 1f - Mathf.Exp(-poseSmooth * dt));
 
+            // Aim: blend towards the centred pose and the narrower field of view.
+            bool aiming = rifle != null && rifle.IsAiming;
+            aimBlend = Mathf.Lerp(aimBlend, aiming ? 1f : 0f, 1f - Mathf.Exp(-aimSmooth * dt));
+            float steady = Mathf.Lerp(1f, aimSwayScale, aimBlend);
+            if (viewCamera != null) viewCamera.fieldOfView = Mathf.Lerp(hipFieldOfView, aimFieldOfView, aimBlend);
+
             // Reload: dip down and roll, peaking halfway through.
             float reloadCurve = rifle != null && rifle.IsReloading ? Mathf.Sin(rifle.ReloadProgress * Mathf.PI) : 0f;
 
-            Vector3 position = basePosition
-                             + bob
+            Vector3 position = Vector3.Lerp(basePosition, aimPosition, aimBlend)
+                             + bob * steady
                              + new Vector3(0f, 0f, -kickBack * kick)
                              + sprintOffset * sprintBlend
                              + new Vector3(0f, -reloadDrop * reloadCurve, 0f);
 
             Quaternion rotation = baseRotation
                                 * Quaternion.Euler(sprintRotation * sprintBlend)
-                                * Quaternion.Euler(-kickPitch * kick + sway.x, sway.y, reloadRoll * reloadCurve);
+                                * Quaternion.Euler(-kickPitch * kick + sway.x * steady, sway.y * steady, reloadRoll * reloadCurve);
 
             transform.localPosition = position;
             transform.localRotation = rotation;
