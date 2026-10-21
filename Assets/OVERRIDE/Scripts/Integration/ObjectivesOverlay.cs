@@ -18,7 +18,7 @@ namespace Override.Integration
         DirectorController director;
         string message = "Find the terminals and hold E to override them.";
         float messageUntil;
-        bool won, dead;
+        bool won;
 
         void Start()
         {
@@ -32,13 +32,11 @@ namespace Override.Integration
         void OnEnable()
         {
             GameEvents.TerminalOverridden += OnTerminalOverridden;
-            GameEvents.PlayerDied += OnPlayerDied;
         }
 
         void OnDisable()
         {
             GameEvents.TerminalOverridden -= OnTerminalOverridden;
-            GameEvents.PlayerDied -= OnPlayerDied;
             if (director != null) director.Announced -= Show;
         }
 
@@ -49,8 +47,6 @@ namespace Override.Integration
                 ? "All three terminals overridden: the Core is open. Hold E at the Core console for 30 s."
                 : $"{zone} terminal overridden ({HackTerminal.TerminalsDone}/3).");
         }
-
-        void OnPlayerDied() => dead = true;
 
         void Show(string text)
         {
@@ -73,8 +69,8 @@ namespace Override.Integration
             if (director != null && director.FinalWave) GUILayout.Label(">> FINAL WAVE <<");
             GUILayout.EndArea();
 
-            string top = won ? "ARGUS OFFLINE. You win!" : dead ? "You died. (Respawn comes with game flow; stop Play to retry.)" :
-                         Time.time < messageUntil ? message : null;
+            // Death and victory have their own screens (GameFlow); here only the passing messages.
+            string top = won ? null : Time.time < messageUntil ? message : null;
             if (top != null) GUI.Box(new Rect(w / 2 - 280, 40, 560, 30), top);
         }
     }
