@@ -8,6 +8,8 @@ namespace Override.Motor
     {
         public bool isDead = false;
 
+        public Vector3 Velocity => controller != null ? controller.velocity : Vector3.zero;
+
         [SerializeField] private float moveSpeed = 5f;
         [SerializeField] private float rotationSpeed = 10f;
         [SerializeField] private float fireInterval = 1f;

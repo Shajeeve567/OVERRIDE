@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 3811670032304899803}
   - component: {fileID: 3905789525406065112}
   - component: {fileID: 3969836892939404921}
+  - component: {fileID: 11400001}
   m_Layer: 0
   m_Name: Seeker
   m_TagString: Untagged
@@ -79,7 +80,7 @@ MonoBehaviour:
   isPlayer: 0
   godMode: 0
   dropOnDeath: {fileID: 2802224437076178189, guid: 83820ed91e5bf4cc5a3d6e0b208cff66, type: 3}
-  disableOnDeath: 1
+  disableOnDeath: 0
   destroyOnDeath: 0
 --- !u!114 &3905789525406065112
 MonoBehaviour:
@@ -418,3 +419,33 @@ Transform:
   - {fileID: 4210035226593600528}
   m_Father: {fileID: 1361619120282657277}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &11400001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2059032119981473657}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 07bc308bba90455b9687bbf8824461c1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Override.Hunter.SeekerVisuals
+  visual: {fileID: 7074737909909438871}
+  sensorCore: {fileID: 4210035226593600528}
+  hoverAmplitude: 0.08
+  hoverFrequency: 1.5
+  maxLean: 10
+  maxBank: 14
+  leanResponse: 7
+  bankResponse: 8
+  referenceSpeed: 6
+  chargeResponse: 9
+  lungeDuration: 0.22
+  lungeDistance: 0.22
+  lungeSquash: 0.18
+  sensorChargeScale: 0.22
+  hurtDuration: 0.18
+  hurtShake: 0.07
+  deathDuration: 1.6
+  deathGravity: 22

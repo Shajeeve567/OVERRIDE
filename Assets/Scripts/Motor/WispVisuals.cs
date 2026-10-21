@@ -12,6 +12,11 @@ namespace Override.Motor
         public float bankAmount = 15f;
         public float bankSpeed = 5f;
 
+        [Header("Locomotion Lean")]
+        public float leanAmount = 12f;
+        public float leanSpeed = 6f;
+        public float referenceSpeed = 5f;
+
         [Header("Animation Culling")]
         public float cullDistance = 30f;
 
@@ -39,8 +44,11 @@ namespace Override.Motor
         private Quaternion baseLocalRotation;
         private Vector3 baseLocalScale;
         private Transform wispRoot;
+        private AgentMotor motor;
         private float lastRootYaw;
         private float currentBank;
+        private float currentLean;
+        private float currentRoll;
 
         private float spawnTimer = -1f;
         private float attackTimer = -1f;
@@ -57,6 +65,7 @@ namespace Override.Motor
             baseLocalRotation = transform.localRotation;
             baseLocalScale = transform.localScale;
             wispRoot = transform.parent != null ? transform.parent : transform;
+            motor = GetComponentInParent<AgentMotor>();
             lastRootYaw = wispRoot.eulerAngles.y;
 
             meshRenderers = GetComponentsInChildren<MeshRenderer>(true);
@@ -97,7 +106,24 @@ namespace Override.Motor
             float targetBank = isDead ? 0f : Mathf.Clamp(yawDelta * 5f, -bankAmount, bankAmount);
             currentBank = Mathf.Lerp(currentBank, targetBank, dt * bankSpeed);
 
-            float hover = isDead ? 0f : Mathf.Sin(Time.time * hoverFrequency) * hoverAmplitude;
+            float speed01 = 0f;
+            float targetLean = 0f;
+            float targetRoll = 0f;
+            if (!isDead && motor != null)
+            {
+                Vector3 planarVelocity = motor.Velocity;
+                planarVelocity.y = 0f;
+                speed01 = Mathf.Clamp01(planarVelocity.magnitude / Mathf.Max(0.01f, referenceSpeed));
+
+                Vector3 localVelocity = wispRoot.InverseTransformDirection(planarVelocity);
+                targetLean = Mathf.Clamp(localVelocity.z / Mathf.Max(0.01f, referenceSpeed), -1f, 1f) * leanAmount;
+                targetRoll = -Mathf.Clamp(localVelocity.x / Mathf.Max(0.01f, referenceSpeed), -1f, 1f) * leanAmount * 0.5f;
+            }
+
+            currentLean = Mathf.Lerp(currentLean, targetLean, dt * leanSpeed);
+            currentRoll = Mathf.Lerp(currentRoll, targetRoll, dt * leanSpeed);
+
+            float hover = isDead ? 0f : Mathf.Sin(Time.time * hoverFrequency) * hoverAmplitude * Mathf.Lerp(1f, 0.65f, speed01);
             Vector3 offset = new Vector3(0f, hover, 0f);
             float pitch = 0f;
             float yawOffset = 0f;
@@ -139,8 +165,10 @@ namespace Override.Motor
                 if (t >= 1f) hurtTimer = -1f;
             }
 
+            pitch += currentLean;
+
             transform.localPosition = baseLocalPosition + offset;
-            transform.localRotation = baseLocalRotation * Quaternion.Euler(pitch, yawOffset, -currentBank);
+            transform.localRotation = baseLocalRotation * Quaternion.Euler(pitch, yawOffset, -currentBank + currentRoll);
             transform.localScale = baseLocalScale * scale;
 
             UpdateGlow();
@@ -195,7 +223,15 @@ namespace Override.Motor
 
             float pulse = 1f + Mathf.Sin(Time.time * 4f) * 0.15f;
             float attackBoost = attackTimer >= 0f ? glowAttackIntensity : 0f;
-            glowLight.intensity = glowBaseIntensity * pulse + attackBoost;
+            float spawnBoost = 0f;
+
+            if (spawnTimer >= 0f)
+            {
+                float t = Mathf.Clamp01(spawnTimer / Mathf.Max(0.01f, spawnDuration));
+                spawnBoost = (1f - t) * glowAttackIntensity * 0.6f;
+            }
+
+            glowLight.intensity = glowBaseIntensity * pulse + attackBoost + spawnBoost;
         }
 
         private void EnsureWispIsHittable()

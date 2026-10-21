@@ -10,6 +10,7 @@
 // MOVEMENT: a simple path follower on a kinematic Rigidbody (hover, turn, bob). It's a stand-in for
 // Rithish's team motor: swapping it changes nothing in the brain.
 
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using Override.Core;
@@ -47,6 +48,7 @@ namespace Override.Hunter
 
         HunterBrain brain;
         Rigidbody body;
+        SeekerVisuals seekerVisuals;
         float floorTop;
 
         // Senses, filled between ticks and cleared after each one.
@@ -78,7 +80,9 @@ namespace Override.Hunter
         public float FloorTop => floorTop;
         public double LastTickMilliseconds { get; private set; }
         public Vector3[] CurrentPath => followingPath;
+        public AgentCommand CurrentCommand => command;
         public float HoverHeight => hoverHeight;
+        public event Action Attacked;
 
         // ---------------------------------------------------------------- IHunterSenses
         public Vector3 Position => transform.position;
@@ -120,6 +124,7 @@ namespace Override.Hunter
         void Awake()
         {
             body = GetComponent<Rigidbody>();
+            seekerVisuals = GetComponent<SeekerVisuals>();
             body.isKinematic = true;
             body.useGravity = false;
             body.interpolation = RigidbodyInterpolation.Interpolate;
@@ -252,6 +257,7 @@ namespace Override.Hunter
             if (Vector3.Distance(transform.position, player.position + Vector3.up) > settings.AttackRange) return;
             nextAttack = Time.time + settings.AttackCooldown;
             playerDamageable.TakeDamage(settings.AttackDamage, player.position + Vector3.up, transform.forward);
+            Attacked?.Invoke();
         }
 
         // ---------------------------------------------------------------- move
@@ -301,7 +307,7 @@ namespace Override.Hunter
 
         void LateUpdate()
         {
-            if (visual != null)
+            if (seekerVisuals == null && visual != null)
                 visual.localPosition = visualRest + Vector3.up * (Mathf.Sin(Time.time * bobFrequency * 2f * Mathf.PI) * bobAmplitude);
         }
     }
