@@ -70,6 +70,7 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         EnsureBrain();
         _command.Path = null;
         CacheLocalReferences();
+        ApplyRuntimeConfiguration();
     }
 
     private void EnsureBrain()
@@ -80,6 +81,7 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
 
     private void Start()
     {
+        ApplyRuntimeConfiguration();
         if (_currentCover != null)
             _currentCover.TryOccupy(gameObject);
     }
@@ -96,11 +98,10 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         UpdateFacing(Time.deltaTime);
     }
 
-    /// <summary>Rotates the stationary Warden toward confirmed player/noise memory.</summary>
+    /// <summary>Rotates the Warden toward confirmed player/noise memory whether stationary or repositioning.</summary>
     public void UpdateFacing(float deltaTime)
     {
-        if (!_hasKnownPosition || _aimRotationSpeed <= 0f ||
-            (_command.Path != null && _command.Path.Length > 0))
+        if (!_hasKnownPosition || _aimRotationSpeed <= 0f || (_health != null && _health.IsDead))
             return;
 
         Vector3 direction = _lastKnownPosition - transform.position;
@@ -178,6 +179,12 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         _command.Fire = false;
         _command.LookTarget = _hasKnownPosition ? _lastKnownPosition : transform.position + transform.forward;
         _command.AnimationIntent = action.ToString();
+
+        if (_health != null && _health.IsDead)
+        {
+            StopMovement();
+            return;
+        }
 
         switch (action)
         {
@@ -373,9 +380,45 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
 
     private void CachePlayerReferences()
     {
+        if (_playerTarget == null)
+        {
+            GameObject player = GameObject.FindWithTag("Player");
+            if (player != null)
+                _playerTarget = player.transform;
+        }
+
         if (_playerTarget == null) return;
         if (_playerHealth == null) _playerHealth = _playerTarget.GetComponentInParent<Health>();
         if (_playerCollider == null) _playerCollider = _playerTarget.GetComponentInParent<Collider>();
+    }
+
+    public void ApplyRuntimeConfiguration()
+    {
+        CacheLocalReferences();
+
+        if (_health != null && _health.Max < 350f)
+        {
+            _health.Configure(350f, false);
+        }
+
+        if (_playerHealth != null && _playerHealth.Max < 200f)
+        {
+            _playerHealth.Configure(200f, false);
+            _playerHealth.ResetHealth();
+        }
+
+        if (_hearing != null)
+        {
+            _hearing.HearingRange = Mathf.Max(_hearing.HearingRange, 25f);
+            _hearing.SensitivityMultiplier = Mathf.Max(_hearing.SensitivityMultiplier, 2.5f);
+            _hearing.ObstructedRangeMultiplier = Mathf.Max(_hearing.ObstructedRangeMultiplier, 0.8f);
+        }
+
+        // Dynamically balance cover qualities so advance/flank provide tactical offensive incentives
+        if (_advanceCover != null && _advanceCover.Quality < 0.85f) _advanceCover.Quality = 0.85f;
+        if (_flankCover != null && _flankCover.Quality < 0.85f) _flankCover.Quality = 0.85f;
+        if (_currentCover != null && _currentCover.Quality < 0.75f) _currentCover.Quality = 0.75f;
+        if (_retreatCover != null && _retreatCover.Quality > 0.70f) _retreatCover.Quality = 0.70f;
     }
 
     private Vector3 GetPlayerAimPoint()
@@ -433,12 +476,14 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
             $"Leaves:{_lastResult.EvaluatedLeafCount}",
             _bodyStyle);
         string playerHp = _playerHealth != null
-            ? Mathf.CeilToInt(_playerHealth.Current).ToString()
+            ? (_playerHealth.IsDead ? "0 (DEAD)" : Mathf.CeilToInt(_playerHealth.Current).ToString())
             : "unavailable";
         string wardenHp = _health != null
-            ? Mathf.CeilToInt(_health.Current).ToString()
+            ? (_health.IsDead ? "0 (DESTROYED)" : Mathf.CeilToInt(_health.Current).ToString())
             : "unavailable";
         GUILayout.Label($"Player HP:{playerHp}  Warden HP:{wardenHp}", _bodyStyle);
+        if (_health != null && _health.IsDead)
+            GUILayout.Label("[WARDEN DESTROYED - CEASED OPERATIONS]", _warningStyle);
 
         WardenResponseProbabilities probabilities = _lastResult.ResponseProbabilities;
         GUILayout.Label($"Peek {probabilities.Peek:P1}  Push {probabilities.Push:P1}  Hide {probabilities.Hide:P1}", _bodyStyle);

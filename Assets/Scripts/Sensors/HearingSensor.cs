@@ -17,6 +17,7 @@ public sealed class HearingSensor : MonoBehaviour
     [Header("Hearing")]
     [SerializeField, Min(0f)] private float _hearingRange = 15f;
     [SerializeField] private int _noiseKindMask = -1;
+    [SerializeField, Min(0.1f)] private float _sensitivityMultiplier = 1f;
 
     [Header("Obstruction")]
     [Tooltip("Layers that dampen a noise. Leave empty to disable obstruction checks.")]
@@ -42,6 +43,12 @@ public sealed class HearingSensor : MonoBehaviour
     {
         get => _noiseKindMask;
         set => _noiseKindMask = value;
+    }
+
+    public float SensitivityMultiplier
+    {
+        get => _sensitivityMultiplier;
+        set => _sensitivityMultiplier = Mathf.Max(0.1f, value);
     }
 
     public LayerMask ObstacleLayers
@@ -111,7 +118,8 @@ public sealed class HearingSensor : MonoBehaviour
         Vector3 listenerPosition = listener.position;
         Vector3 toNoise = noise.Position - listenerPosition;
         float distance = toNoise.magnitude;
-        float audibleRange = Mathf.Min(_hearingRange, noise.Radius);
+        float effectiveRadius = noise.Radius * _sensitivityMultiplier;
+        float audibleRange = Mathf.Min(_hearingRange, effectiveRadius);
         bool obstructed = IsObstructed(listener, listenerPosition, toNoise, distance);
         if (obstructed)
             audibleRange *= _obstructedRangeMultiplier;
@@ -198,6 +206,7 @@ public sealed class HearingSensor : MonoBehaviour
     private void OnValidate()
     {
         _hearingRange = Mathf.Max(0f, _hearingRange);
+        _sensitivityMultiplier = Mathf.Max(0.1f, _sensitivityMultiplier);
         _obstructedRangeMultiplier = Mathf.Clamp01(_obstructedRangeMultiplier);
     }
 

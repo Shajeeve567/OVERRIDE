@@ -71,7 +71,7 @@ public static class WardenGameplayIntegrationBuilder
             throw new InvalidOperationException("Missing real Player prefab: " + RealPlayerPrefabPath);
 
         GameObject legacyPlayer = FindTaggedObject(scene, "Player");
-        Vector3 playerPos = legacyPlayer != null ? legacyPlayer.transform.position : new Vector3(75f, 1.1f, 27f);
+        Vector3 playerPos = legacyPlayer != null ? legacyPlayer.transform.position : new Vector3(75f, 1.1f, 30f);
         Quaternion playerRot = legacyPlayer != null ? legacyPlayer.transform.rotation : Quaternion.identity;
         Transform playerParent = legacyPlayer != null ? legacyPlayer.transform.parent : null;
 
@@ -86,6 +86,16 @@ public static class WardenGameplayIntegrationBuilder
         player.tag = "Player";
         if (playerParent != null) player.transform.SetParent(playerParent, false);
         player.transform.SetPositionAndRotation(playerPos, playerRot);
+
+        Health playerHealth = player.GetComponent<Health>();
+        if (playerHealth != null)
+        {
+            SerializedObject playerHealthData = new SerializedObject(playerHealth);
+            playerHealthData.FindProperty("maxHealth").floatValue = 200f;
+            playerHealthData.ApplyModifiedPropertiesWithoutUndo();
+            playerHealth.Configure(200f, false);
+            EditorUtility.SetDirty(playerHealth);
+        }
 
         GameObject warden = previewRig.gameObject;
         VisionSensor vision = previewRig.Sensor;
@@ -105,20 +115,24 @@ public static class WardenGameplayIntegrationBuilder
 
         Health health = GetOrAdd<Health>(warden);
         SerializedObject healthData = new SerializedObject(health);
-        healthData.FindProperty("maxHealth").floatValue = 200f;
-        healthData.FindProperty("disableOnDeath").boolValue = true;
+        healthData.FindProperty("maxHealth").floatValue = 350f;
+        healthData.FindProperty("disableOnDeath").boolValue = false;
         healthData.ApplyModifiedPropertiesWithoutUndo();
+        health.Configure(350f, false);
+        EditorUtility.SetDirty(health);
+
+        WardenVisualReferences visualReferences = warden.GetComponentInChildren<WardenVisualReferences>();
 
         HearingSensor hearing = GetOrAdd<HearingSensor>(warden);
-        hearing.Listener = warden.transform;
-        hearing.HearingRange = 15f;
+        hearing.Listener = visualReferences != null && visualReferences.Eye != null ? visualReferences.Eye : warden.transform;
+        hearing.HearingRange = 25f;
+        hearing.SensitivityMultiplier = 2.5f;
         hearing.ObstacleLayers = vision.ObstacleLayers;
-        hearing.ObstructedRangeMultiplier = 0.5f;
+        hearing.ObstructedRangeMultiplier = 0.8f;
 
-        WardenVisualReferences visualReferences = warden.GetComponent<WardenVisualReferences>();
         WardenWeapon weapon = GetOrAdd<WardenWeapon>(warden);
         weapon.Configure(
-            visualReferences != null ? visualReferences.Muzzle : warden.transform,
+            visualReferences != null && visualReferences.Muzzle != null ? visualReferences.Muzzle : warden.transform,
             ~0);
 
         AgentMotor motor = GetOrAdd<AgentMotor>(warden);
@@ -128,12 +142,20 @@ public static class WardenGameplayIntegrationBuilder
         motorData.ApplyModifiedPropertiesWithoutUndo();
 
         Transform parent = warden.transform.parent;
-        WardenCoverPoint current = CreateCoverPoint("Warden Cover - Current", new Vector3(75f, 0.35f, 39f), 0.70f, parent);
-        WardenCoverPoint advance = CreateCoverPoint("Warden Cover - Advance", new Vector3(75f, 0.35f, 35f), 0.80f, parent);
-        WardenCoverPoint flank = CreateCoverPoint("Warden Cover - Flank", new Vector3(68.5f, 0.35f, 35f), 0.75f, parent);
-        WardenCoverPoint retreat = CreateCoverPoint("Warden Cover - Retreat", new Vector3(75f, 0.35f, 43f), 0.90f, parent);
+        WardenCoverPoint current = CreateCoverPoint("Warden Cover - Current", new Vector3(75f, 0.35f, 38f), 0.75f, parent);
+        WardenCoverPoint advance = CreateCoverPoint("Warden Cover - Advance", new Vector3(75f, 0.35f, 34f), 0.85f, parent);
+        WardenCoverPoint flank = CreateCoverPoint("Warden Cover - Flank", new Vector3(68.5f, 0.35f, 34f), 0.85f, parent);
+        WardenCoverPoint retreat = CreateCoverPoint("Warden Cover - Retreat", new Vector3(75f, 0.35f, 42f), 0.70f, parent);
 
         DirectorController director = FindComponent<DirectorController>(scene);
+        if (director != null)
+        {
+            SerializedObject directorData = new SerializedObject(director);
+            var playerMaxHealthProp = directorData.FindProperty("playerMaxHealth");
+            if (playerMaxHealthProp != null) playerMaxHealthProp.floatValue = 200f;
+            directorData.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(director);
+        }
         WardenGameplayController controller = GetOrAdd<WardenGameplayController>(warden);
         controller.Configure(
             vision,

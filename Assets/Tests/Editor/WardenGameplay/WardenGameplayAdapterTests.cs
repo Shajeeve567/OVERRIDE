@@ -135,6 +135,32 @@ namespace Override.WardenGameplay.Tests
         }
 
         [Test]
+        public void WardenWeapon_WhenOwnColliderInPath_IgnoresSelfAndDamagesTarget()
+        {
+            GameObject warden = CreateObject("Warden");
+            BoxCollider wardenCollider = warden.AddComponent<BoxCollider>();
+            wardenCollider.size = new Vector3(2f, 2f, 2f);
+            Component wardenHealth = warden.AddComponent(_healthType);
+            Invoke(wardenHealth, "Configure", 200f, false);
+
+            Component weapon = warden.AddComponent(_weaponType);
+            Invoke(weapon, "Configure", warden.transform, (LayerMask)(~0));
+            Invoke(weapon, "Awake");
+
+            GameObject player = CreateObject("Player");
+            player.transform.position = new Vector3(0f, 0f, 5f);
+            player.AddComponent<BoxCollider>().size = new Vector3(1f, 2f, 1f);
+            Component playerHealth = player.AddComponent(_healthType);
+            Invoke(playerHealth, "Configure", 100f, false);
+
+            Physics.SyncTransforms();
+            Invoke(weapon, "FireShot", player.transform.position);
+
+            Assert.That(Read<float>(wardenHealth, "Current"), Is.EqualTo(200f));
+            Assert.That(Read<float>(playerHealth, "Current"), Is.EqualTo(92f).Within(0.001f));
+        }
+
+        [Test]
         public void HoldAction_WhenAmmoEmpty_TriggersReload()
         {
             GameObject warden = CreateObject("Warden");
@@ -251,6 +277,80 @@ namespace Override.WardenGameplay.Tests
             object resolvedHealth = playerHealthField.GetValue(controller);
             Assert.That(resolvedHealth, Is.Not.Null);
             Assert.That(resolvedHealth, Is.SameAs(health));
+        }
+
+        [Test]
+        public void UpdateFacing_WhilePathIsActive_StillFacesKnownPlayerPosition()
+        {
+            GameObject warden = CreateObject("Warden");
+            warden.transform.position = Vector3.zero;
+            warden.transform.rotation = Quaternion.identity;
+
+            Component controller = warden.AddComponent(_controllerType);
+            Invoke(controller, "Awake");
+
+            // Set known position to the right (10, 0, 0)
+            FieldInfo knownPosField = _controllerType.GetField("_lastKnownPosition", BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo hasKnownPosField = _controllerType.GetField("_hasKnownPosition", BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo commandField = _controllerType.GetField("_command", BindingFlags.Instance | BindingFlags.NonPublic);
+
+            Assert.That(knownPosField, Is.Not.Null);
+            Assert.That(hasKnownPosField, Is.Not.Null);
+            Assert.That(commandField, Is.Not.Null);
+
+            knownPosField.SetValue(controller, new Vector3(10f, 0f, 0f));
+            hasKnownPosField.SetValue(controller, true);
+
+            // Simulate active movement path towards (0, 0, 10)
+            object command = commandField.GetValue(controller);
+            PropertyInfo pathProp = command.GetType().GetProperty("Path");
+            Assert.That(pathProp, Is.Not.Null);
+            pathProp.SetValue(command, new[] { new Vector3(0f, 0f, 10f) });
+
+            // Call UpdateFacing with active path
+            MethodInfo updateFacing = _controllerType.GetMethod("UpdateFacing", BindingFlags.Instance | BindingFlags.Public);
+            updateFacing.Invoke(controller, new object[] { 1f });
+
+            float angleAfter = Vector3.Angle(warden.transform.forward, Vector3.right);
+            Assert.That(angleAfter, Is.LessThan(90f));
+            Assert.That(warden.transform.forward.x, Is.GreaterThan(0.1f));
+        }
+
+        [Test]
+        public void ApplyRuntimeConfiguration_ConfiguresHealthAndCoverQualities()
+        {
+            GameObject warden = CreateObject("Warden");
+            Component wardenHealth = warden.AddComponent(_healthType);
+            Invoke(wardenHealth, "Configure", 100f, false);
+
+            GameObject player = CreateObject("Player");
+            Component playerHealth = player.AddComponent(_healthType);
+            Invoke(playerHealth, "Configure", 100f, false);
+
+            Component advance = CreateComponent("Advance", _coverType);
+            Component flank = CreateComponent("Flank", _coverType);
+            Component retreat = CreateComponent("Retreat", _coverType);
+
+            Set(advance, "Quality", 0.5f);
+            Set(flank, "Quality", 0.5f);
+            Set(retreat, "Quality", 0.95f);
+
+            Component controller = warden.AddComponent(_controllerType);
+            MethodInfo configure = _controllerType.GetMethod("Configure", BindingFlags.Instance | BindingFlags.Public);
+            configure.Invoke(controller, new object[]
+            {
+                null, null, null, wardenHealth, player.transform, null,
+                null, advance, flank, retreat
+            });
+
+            MethodInfo applyConfig = _controllerType.GetMethod("ApplyRuntimeConfiguration", BindingFlags.Instance | BindingFlags.Public);
+            applyConfig.Invoke(controller, null);
+
+            Assert.That(Read<float>(wardenHealth, "Max"), Is.EqualTo(350f));
+            Assert.That(Read<float>(playerHealth, "Max"), Is.EqualTo(200f));
+            Assert.That(Read<float>(advance, "Quality"), Is.GreaterThanOrEqualTo(0.85f));
+            Assert.That(Read<float>(flank, "Quality"), Is.GreaterThanOrEqualTo(0.85f));
+            Assert.That(Read<float>(retreat, "Quality"), Is.LessThanOrEqualTo(0.70f));
         }
 
         private Component CreateComponent(string name, Type type)

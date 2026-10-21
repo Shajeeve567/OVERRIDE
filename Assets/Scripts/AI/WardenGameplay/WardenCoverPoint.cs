@@ -15,7 +15,11 @@ public sealed class WardenCoverPoint : MonoBehaviour
     private GameObject _occupant;
 
     public Vector3 Position => transform.position;
-    public float Quality => Mathf.Clamp01(_quality);
+    public float Quality
+    {
+        get => Mathf.Clamp01(_quality);
+        set => _quality = Mathf.Clamp01(value);
+    }
     public bool CoverAvailable => _coverAvailable && isActiveAndEnabled;
     public bool PathAvailable => _pathAvailable && isActiveAndEnabled;
     public bool IsOccupied => _occupant != null;
@@ -53,14 +57,12 @@ public sealed class WardenCoverPoint : MonoBehaviour
         };
     }
 
-#if UNITY_EDITOR
     public void Configure(float quality, bool coverAvailable = true, bool pathAvailable = true)
     {
         _quality = Mathf.Clamp01(quality);
         _coverAvailable = coverAvailable;
         _pathAvailable = pathAvailable;
     }
-#endif
 
     private void OnDisable()
     {

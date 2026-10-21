@@ -125,17 +125,27 @@ public sealed class WardenWeapon : MonoBehaviour
         _ammo--;
 
         Vector3 tracerEnd = origin.position + direction * _range;
-        if (Physics.Raycast(
-                origin.position,
-                direction,
-                out RaycastHit hit,
-                _range,
-                _hitLayers,
-                QueryTriggerInteraction.Ignore))
+        RaycastHit[] hits = Physics.RaycastAll(
+            origin.position,
+            direction,
+            _range,
+            _hitLayers,
+            QueryTriggerInteraction.Ignore);
+
+        if (hits != null && hits.Length > 0)
         {
-            tracerEnd = hit.point;
-            IDamageable damageable = hit.collider.GetComponentInParent<IDamageable>();
-            damageable?.TakeDamage(_damagePerShot, hit.point, hit.normal);
+            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            for (int i = 0; i < hits.Length; i++)
+            {
+                RaycastHit candidate = hits[i];
+                if (candidate.collider != null && candidate.collider.transform.root == transform.root)
+                    continue;
+
+                tracerEnd = candidate.point;
+                IDamageable damageable = candidate.collider.GetComponentInParent<IDamageable>();
+                damageable?.TakeDamage(_damagePerShot, candidate.point, candidate.normal);
+                break;
+            }
         }
 
         ShowTracer(origin.position, tracerEnd);

@@ -111193,12 +111193,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HearingSensor
   _listener: {fileID: 873626448}
-  _hearingRange: 15
+  _hearingRange: 25
   _noiseKindMask: -1
   _obstacleLayers:
     serializedVersion: 2
     m_Bits: 512
-  _obstructedRangeMultiplier: 0.5
+  _obstructedRangeMultiplier: 0.8
+  _sensitivityMultiplier: 2.5
 --- !u!114 &873626456
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -111211,11 +111212,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 64ba56e36be51458e97fe5338a56ee9b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Override.Combat.Health
-  maxHealth: 200
+  maxHealth: 350
   isPlayer: 0
   godMode: 0
   dropOnDeath: {fileID: 0}
-  disableOnDeath: 1
+  disableOnDeath: 0
   destroyOnDeath: 0
 --- !u!143 &873626457
 CharacterController:
