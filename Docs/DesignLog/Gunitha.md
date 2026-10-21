@@ -80,6 +80,12 @@ The Seeker is **blind**. It keeps a probability for every 2 m cell of where the 
 4. **Goal.** score(c) = M(c)·exp(−λ·distance), where M(c) is the probability within 4 m of c, from a summed-area table, so it's O(1) per cell.
 5. **Plan.** A* to the best goal. If that fails (crate in the way), the next two goals are tried.
 
+### Balance decisions
+| Decision | Value | Why |
+|---|---|---|
+| Seeker health | 250 HP (GDD 150) | Aim down sights (0.2° spread) wasn't in the GDD. At 150 HP an aimed player killed the Seeker in about 1.2 s, or 0.6 s on its ×2 eye: over before it could create any tension, for an enemy that never respawns. 250 HP gives about 2 s on the body and still about 1 s on the eye, so precise shooting stays rewarded |
+| Number of Seekers | 1 | GDD: one Seeker, starting in Maintenance. A second would swarm the Maintenance hack (beeps every 2 s); escalation already comes from the Director's drones, and the final-phase recall gives the Seeker its finale role |
+
 ### Parameters
 | Symbol | Value | Why |
 |---|---|---|

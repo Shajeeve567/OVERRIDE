@@ -2,7 +2,7 @@
 // Builds the Seeker prefab from code, so every part and number is visible here instead of being clicked
 // together in the Inspector:  OVERRIDE > Hunter > Create Seeker Prefab
 //
-//   Seeker                 kinematic Rigidbody, Health 150 (GDD), HunterBody (brain + senses), HunterDebugView
+//   Seeker                 kinematic Rigidbody, Health 250 (GDD 150, see design log), HunterBody (brain + senses), HunterDebugView
 //     Visual               bobbed by HunterBody
 //       Shell              0.8 m red emissive sphere (GDD placeholder look); its collider takes body hits
 //       SensorCore         glowing core at the front, Hitbox x2 (GDD weak point)
@@ -34,7 +34,7 @@ namespace Override.EditorTools
             body.isKinematic = true;
             body.useGravity = false;
             var health = root.AddComponent<Health>();
-            health.Configure(150f, false);   // GDD: 150 HP; disabled on death, never respawns
+            health.Configure(250f, false);   // GDD 150, raised to 250 to balance aim down sights; disabled on death, never respawns
             SetAmmoDrop(health);
             var hunter = root.AddComponent<HunterBody>();
             root.AddComponent<HunterDebugView>();

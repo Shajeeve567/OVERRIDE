@@ -75,7 +75,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 64ba56e36be51458e97fe5338a56ee9b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Override.Combat.Health
-  maxHealth: 150
+  maxHealth: 250
   isPlayer: 0
   godMode: 0
   dropOnDeath: {fileID: 2802224437076178189, guid: 83820ed91e5bf4cc5a3d6e0b208cff66, type: 3}
