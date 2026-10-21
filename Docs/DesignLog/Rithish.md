@@ -2,7 +2,7 @@
 
 **Roles:** Intelligent Systems (IS) — Wisp drone AI, with shared gameplay motor and visual feedback.  
 **Main code:** `Assets/Scripts/AI/PathfinderBrain.cs`, `Assets/Scripts/Motor/AgentMotor.cs`, `Assets/Scripts/Motor/WispVisuals.cs`, `Assets/Scripts/Motor/WispHealth.cs`, `Assets/Scripts/AI/WaypointGraph.cs`, `Assets/Scripts/Core/`.  
-**Editor tooling:** `Assets/Editor/WaypointGraphValidator.cs`.  
+**Editor tooling:** `Assets/Editor/WaypointGraphValidator.cs`, `Assets/Editor/AutoWaypointGenerator.cs`.  
 **Branch:** `fix/wisp-glitches`  
 **Date:** 21 October 2026
 
@@ -16,10 +16,11 @@ The Wisp is the Director's fast flying pressure unit. My work covers the whole r
 |---|---|---|
 | Decision layer | `PathfinderBrain`, `IAgentBrain`, `AgentCommand`, `WorldSnapshot` | Choose a path, look target, fire state and animation intent |
 | Navigation | `PathfinderBrain`, `WaypointGraph`, `WaypointNode` | Exposure-weighted A*, direct-chase fallback, bay exit |
-| Movement | `AgentMotor` | Hover, path following, rotation, stuck detection |
-| Combat | `AgentMotor`, `WispHealth` | Chest-target hitscan, beam, damage, death |
-| Presentation | `WispVisuals` | Procedural spawn, attack, hurt, death, banking, lean, hover audio |
-| Validation | `WaypointGraphValidator` | Detect isolated nodes and one-way links |
+| Senses | `PathfinderBrain`, `NoiseBus` | 25 m / 120° vision, 10 m hearing, last-known position |
+| Movement | `AgentMotor` | Hover, path following, rotation, stuck detection, shared Warden safety |
+| Combat | `AgentMotor`, `WispHealth` | Chest-target hitscan, beam, damage, graceful death |
+| Presentation | `WispVisuals`, `AgentMotor` | Procedural spawn, attack, hurt, death, hover hum, shot audio |
+| Validation | `WaypointGraphValidator`, `AutoWaypointGenerator` | Detect graph faults; generate and link grid waypoints |
 
 The four-team contracts stayed intact: the Wisp implements `IAgentBrain`, uses the shared `AgentCommand`/`WorldSnapshot` data, and does not require changes to the Director's `IDirectorDrone` launch contract.
 
@@ -51,25 +52,24 @@ Path, LookTarget, Fire, AnimationIntent
 
 The original graph builder reads manual `WaypointNode` links and produces a directed adjacency list. A* uses those links directly.
 
-The current greybox graph is the main limitation:
+The manually authored greybox graph is still the main navigation limitation:
 
 - only **10 nodes**, all `WP_Bay_*`;
 - only **3 edges**: `0↔1`, `2↔3`, `7↔9`;
 - nodes `4`, `5`, `6` and `8` are isolated;
 - that is **7 disconnected components**.
 
-So A* can only route inside one of those small pairs. It cannot cross the map. The runtime therefore needs a reliable direct-chase fallback, and the level needs more room/corridor nodes before the Wisp can navigate the full facility.
+So A* can only route inside one of those small pairs. It cannot cross the map. The runtime therefore needs a reliable direct-chase fallback, and the level needs room/corridor nodes before the Wisp can navigate the full facility.
 
-`WaypointGraphValidator` was added to make this visible:
+Two editor tools now make that manageable:
 
-**`Tools > OVERRIDE > Validate Waypoint Graph`**
+`WaypointGraphValidator` — **`Tools > OVERRIDE > Validate Waypoint Graph`** — reports isolated nodes and missing reciprocal edges without editing the scene.
 
-It reports:
+`AutoWaypointGenerator` — **`Tools > OVERRIDE > Generate Grid Waypoints`** — samples a 7 m grid across the `OVERRIDE_Greybox` bounds, raycasts down from 0.5 m above the floor, and accepts only upward-facing floor hits. It places a `WaypointNode` 2.5 m above each hit when a 0.5 m sphere is clear. All generated nodes live under one `AutoWaypoints` parent, which is replaced on each run; other waypoint nodes are never moved or deleted.
 
-- isolated nodes with zero neighbours;
-- missing reciprocal edges (`A → B` exists but `B → A` does not).
+Generated pairs within 10 m are linked when a 0.45 m sphere cast is clear. Door colliders (`IDoor`/`ILockableDoor`) and non-kinematic rigidbodies are ignored. Each existing waypoint is also linked to its nearest clear generated node, and every link is added in both directions. The generator uses Undo, marks the scene dirty and logs the node/link counts.
 
-This is a diagnostic tool only; it does not edit the scene.
+The generator has been implemented and compiled but **not executed on the greybox yet**, so the scene still contains the original 10-node graph.
 
 ### 3.2 Exposure-weighted A*
 
@@ -104,17 +104,36 @@ The old targeting rule switched to the nearest terminal as soon as LOS broke. If
 
 The new rule is:
 
-1. **LOS present:** update `lastSeenPlayerPosition`; `timeSinceLosLost = 0`.
-2. **LOS lost for under 2 s:** chase `lastSeenPlayerPosition`.
-3. **LOS lost for 2 s or more and player within 15 m of a terminal:** target that terminal.
-4. **Target mode changes** are limited by a **1.5 s cooldown**, so the Wisp cannot flip between player and terminal every frame.
-5. **A* failure:** chase the last-seen position only if a direct sphere cast is clear. If not, hold position. It never falls back to the terminal.
+1. **Player seen:** update `lastKnownPlayerPosition`; `timeSinceLosLost = 0`.
+2. **Not seen for under 2 s:** chase `lastKnownPlayerPosition`.
+3. **Not seen for 2 s or more and player within 15 m of a terminal:** target that terminal.
+4. **Terminal ambush requires that the Wisp cannot actually see the player.** Raw LOS alone is not enough.
+5. **Target mode changes** are limited by a **1.5 s cooldown**, so the Wisp cannot flip between player and terminal every frame.
+6. **A* failure:** chase the last-known position only if a direct sphere cast is clear. If not, hold position. It never falls back to the terminal.
 
 This keeps the terminal ambush as a deliberate behaviour rather than an oscillation.
+
+### 3.5 Vision and hearing
+
+The GDD senses are now implemented against the Wisp's own state:
+
+- **Vision — 25 m, 120° total cone.** `CanSeePlayer()` rejects targets outside 25 m or outside ±60° of the Wisp's forward vector, then runs the existing `HasLineOfSight` check.
+- **Hearing — 10 m.** `PathfinderBrain` subscribes to `NoiseBus.Emitted`. Any noise within 10 m updates `lastKnownPlayerPosition`, clears terminal ambush and forces a path refresh.
+- **Launch.** The Director's player transform seeds `lastKnownPlayerPosition`, so every new Wisp starts with a valid investigation target even before its first sighting.
+
+Hearing updates the last-known position but does not count as sight, so `timeSinceLosLost` still tracks actual vision loss.
 
 ---
 
 ## 4. Bay launch and movement
+
+`AgentMotor` is shared with the Warden. The Wisp-only movement features are gated behind `[SerializeField] bool isFlying`:
+
+- capsule shrink in `Awake`;
+- hover-height adjustment and vertical movement;
+- the stuck timer.
+
+Only `Wisp.prefab` has `Is Flying` enabled. The Warden leaves it disabled, so its grounded movement, collider and stuck behaviour are unchanged.
 
 ### 4.1 The 1.4 m hatch problem
 
@@ -137,12 +156,12 @@ The Wisp still leaves under its own power; it is not teleported to the waypoint.
 | Rotation speed | 10 | Smooth turn toward the path |
 | Stuck timeout | 3 s | Long enough for an exit/avoidance, short enough to let the Director respawn |
 | Path probe radius | 0.9 × controller radius | Skip a waypoint only when the Wisp fits through the gap |
-| Fire interval | 0.33 s | Three shots per second; prefab's old 1 s value is migrated at Awake |
-| Damage | 6 | Roughly 18 DPS before misses |
+| Fire interval | 0.75 s | Inspector-authored on `Wisp.prefab`; no runtime override |
+| Damage | 6 | Roughly 8 DPS before misses |
 
 Path smoothing uses a sphere cast toward the next waypoint. If the line is clear, the Wisp advances its path index early. The probe ignores the player and other `IDamageable` agents, so an ally does not look like a wall.
 
-Stuck detection tracks the best distance reached toward the current path point. If there is no improvement for 3 s and the Wisp is not firing or leaving a bay, it destroys itself so the Director can replace it.
+Stuck detection tracks the best distance reached toward the current path point. If there is no improvement for 3 s and the Wisp is not firing or leaving a bay, it calls `WispHealth.Kill()` so the existing crash sequence plays. A bare `Destroy` remains only as a fallback when no health component exists.
 
 ---
 
@@ -153,11 +172,12 @@ The Wisp is a flying harassment unit, not a boss:
 - **60 HP**, so precise player fire removes it quickly.
 - **15 m** attack range.
 - Fire requires LOS.
-- **0.33 s** between shots, **6 damage** per hit.
+- **0.75 s** between shots, **6 damage** per hit. This is an Inspector value on the prefab, not a hard-coded runtime rate.
 - Aim point is the player's chest centre.
 - The beam is a short-lived `LineRenderer`; the old version only drew a Scene-view debug line.
 - The shot ignores other agents but stops on real blockers.
 - Damage is applied through the shared `IDamageable` contract.
+- Each shot plays a short synthesized 3D sound from a runtime-created `AudioSource`.
 
 The Wisp stops pathing while firing (`Path = { transform.position }`), turns to the player, and resumes navigation when the player leaves range or LOS.
 
@@ -180,7 +200,9 @@ The Wisp stops pathing while firing (`Path = { transform.position }`), turns to 
 
 The hover hum is generated at runtime as a looping 110 Hz/220 Hz tone, so no audio asset is required. Audio is muted while culled and stopped on death.
 
-The death sequence in `WispHealth` disables control and colliders, then spins and drops the root for 2 s before destroying it.
+Shots use a separate `ShotAudio` child created by `AgentMotor`, with a 0.12 s synthesized descending tone and `PlayOneShot`. The source is 3D, null-checked and independent of the hover hum, which remains owned by `WispVisuals`.
+
+The death sequence in `WispHealth` disables control and colliders, then spins and drops the root for 2 s before destroying it. `Kill()` enters that sequence directly, so a stuck Wisp crashes visibly instead of disappearing.
 
 ---
 
@@ -190,45 +212,14 @@ The death sequence in `WispHealth` disables control and colliders, then spins an
 |---|---|---|
 | Wisp only damaged the player at point-blank range | Aimed at the player's feet; floor/props blocked the ray | Aim at `CharacterController.bounds.center`; sort hits; ignore own hierarchy |
 | Wisp did not leave the bay | 2 m collider could not fit the 1.4 m hatch; hover climb wedged it | Compact Wisp collider, hold altitude on `ExitBay`, suspend stuck detection during exit |
-| Wisp returned to the terminal repeatedly | Target switched to terminal immediately on LOS loss; graph is disconnected | 2 s last-seen grace, 1.5 s target cooldown, last-seen fallback instead of terminal |
+| Wisp returned to the terminal repeatedly | Target switched to terminal immediately on LOS loss; graph is disconnected | 2 s last-known grace, sight-gated terminal, 1.5 s target cooldown |
 | Wisp fired through other agents | All colliders counted as blockers | Ignore colliders with an `IDamageable` parent |
 | Wisp followed stale waypoints into cover | No path smoothing/validation | Sphere-cast path probe before skipping a node |
-| Wisp could remain stuck forever | No stuck handling | 3 s distance-progress watchdog and self-destroy for Director respawn |
-| Wisp prefab kept the old 1 s fire rate | Prefab serialised `fireInterval: 1` | Awake migrates exactly `1` to `0.33` |
-| Graph problems were invisible | No editor validation | Menu item reports isolated nodes and missing reciprocal edges |
+| Warden floated and died from Wisp-only movement | Shared `AgentMotor` applied hover and stuck logic to every agent | Gate capsule, vertical movement and stuck timer behind `isFlying` |
+| Wisp could remain stuck forever | No stuck handling | 3 s distance-progress watchdog; `WispHealth.Kill()` for a visible crash |
+| Wisp fire rate ignored the Inspector | `Awake()` forced `fireInterval` to 0.33 | Removed the override; prefab now sets 0.75 |
+| Wisp had no sight or hearing model | Decisions used raw LOS only | 25 m / 120° vision plus 10 m `NoiseBus` hearing |
+| Shot had no sound | No shot audio source | Runtime-created 3D `ShotAudio` with synthesized clip |
+| Shot blockers spammed the Console | Test `Debug.Log` per blocked shot | Removed test logging |
+| Graph problems were invisible and manual | No validation or generation | Validator plus `AutoWaypointGenerator` with reciprocal links |
 
----
-
-## 8. Verification
-
-- Runtime compilation: **passed** using the Unity Roslyn compiler against the full `Assembly-CSharp` response file.
-- Editor compilation: **passed** for `WaypointGraphValidator.cs` against `Assembly-CSharp-Editor`.
-- Manual Play-mode checks confirmed the bay exit, chest-target shooting and the reduced terminal-return behaviour.
-- No automated EditMode tests currently cover the Wisp brain or motor. The Director and Hunter have their own test suites; Wisp testing is still manual.
-- The graph limitation is verified from the scene data: **10 nodes, 3 edges, 7 components**.
-
-### Current limitations
-
-1. **The greybox graph is not a full navigation graph.** It contains only bay anchors. A* cannot route between rooms until room, doorway and corridor nodes are authored.
-2. **No Wisp unit tests.** The targeting hysteresis and bay-exit rules are currently protected by compile checks and play testing, not automated regression tests.
-3. **Target cooldown gates player/terminal mode changes, not every positional update.** This keeps player tracking responsive while preventing mode flapping.
-4. **The server-hall/maintenance rooms still depend on direct chase** when the graph has no route. This works in open sight lines but is not a substitute for a connected graph.
-
----
-
-## 9. Viva talking points
-
-1. **"Why not just chase the player directly?"**  
-   *Direct chase is used when LOS and a sphere cast are clear. Walls, bay geometry and cover need A* or the last-seen fallback. The fallback is deliberately conservative: it never teleports and never walks through geometry.*
-
-2. **"Why does the Wisp go to a terminal when it loses the player?"**  
-   *Only after 2 seconds without LOS and only when the player is within 15 m of a terminal. This makes the terminal an ambush destination instead of a reflex. The 1.5 s cooldown prevents target flapping.*
-
-3. **"Why is the graph so small?"**  
-   *It currently contains only the 10 bay anchor nodes, not a full navigation mesh. The validator exposes the disconnected components. Adding room and doorway nodes is the next navigation step, not a runtime hack.*
-
-4. **"Why did the Wisp get stuck in the bay?"**  
-   *It was physically too tall for the 1.4 m hatch and tried to climb to 2.5 m before exiting. The Wisp now uses a 1.2 m collider and holds its launch altitude until it is outside.*
-
-5. **"Why separate the motor and brain?"**  
-   *The brain is deterministic decision logic; the motor owns Unity physics and CharacterController movement. Shared contracts let the Warden reuse the motor and let the Director launch the Wisp without knowing its AI implementation.*
