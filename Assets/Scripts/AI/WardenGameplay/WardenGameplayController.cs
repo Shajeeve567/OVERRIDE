@@ -27,6 +27,9 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
 
     private const float PushObservationDistance = 1.5f;
     private const float ObservationCooldown = 1.2f;
+    private const float MovementProgressDistance = 0.1f;
+    private const float MovementStuckSeconds = 1.5f;
+    private const float FailedDestinationCooldown = 3f;
 
     [Header("Live references")]
     [SerializeField] private VisionSensor _vision;
@@ -65,8 +68,13 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
     private WardenDecisionResult _lastResult;
     private Health _playerHealth;
     private Collider _playerCollider;
+    private CharacterController _characterController;
+    private AgentMotor _agentMotor;
     private WardenCoverPoint _movementTarget;
     private WardenCoverPoint _guardCover;
+    private WardenCoverPoint _plannedAdvanceCover;
+    private WardenCoverPoint _failedCover;
+    private Collider _lastMovementBlocker;
     private Health _subscribedHealth;
     private Vector3 _lastKnownPosition;
     private float _lastKnownTime = float.NegativeInfinity;
@@ -84,12 +92,22 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
     private bool _hasInvestigationDestination;
     private MovementIntent _movementIntent;
     private float _movementCommitUntil;
+    private WardenAction _movementAction;
+    private WardenAction _executedAction;
+    private bool _hasExecutedAction;
+    private Vector3 _plannedAdvanceDestination;
+    private bool _hasPlannedAdvanceDestination;
+    private Vector3 _movementProgressPosition;
+    private float _lastMovementProgressTime;
+    private float _failedCoverUntil;
+    private string _executionConstraint = string.Empty;
     private GUIStyle _bodyStyle;
     private GUIStyle _titleStyle;
     private GUIStyle _selectedStyle;
     private GUIStyle _warningStyle;
 
     public WardenDecisionResult LastResult => _lastResult;
+    public AgentCommand CurrentCommand => _command;
     public Vector3 LastKnownPosition => _lastKnownPosition;
     public bool HasKnownPosition => _hasKnownPosition;
     public WardenCoverPoint CurrentCover => _currentCover;
@@ -103,6 +121,17 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
     public bool IsPursuing => _movementIntent == MovementIntent.Pursuit;
     public bool IsReturningToGuard => _movementIntent == MovementIntent.ReturnToGuard;
     public Vector3 GuardAnchor => _guardAnchor;
+    public WardenAction ExecutedAction => _executedAction;
+    public bool HasExecutedAction => _hasExecutedAction;
+    public string ExecutionConstraint => _executionConstraint;
+    public string MovementIntentName => _movementIntent.ToString();
+    public Vector3? CurrentDestination => _command.Path != null && _command.Path.Length > 0
+        ? _command.Path[_command.Path.Length - 1]
+        : (Vector3?)null;
+    public Vector3 ActualVelocity => _agentMotor != null ? _agentMotor.Velocity : Vector3.zero;
+    public string MovementBlockerName => _lastMovementBlocker != null
+        ? _lastMovementBlocker.name
+        : string.Empty;
 
     private void Awake()
     {
@@ -142,10 +171,14 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         UpdateFacing(Time.deltaTime);
     }
 
-    /// <summary>Rotates the Warden toward confirmed player/noise memory whether stationary or repositioning.</summary>
+    /// <summary>
+    /// Faces confirmed threat memory while stationary. AgentMotor exclusively owns root rotation
+    /// during movement, preventing two systems from fighting over the same transform each frame.
+    /// </summary>
     public void UpdateFacing(float deltaTime)
     {
-        if (!_hasKnownPosition || _aimRotationSpeed <= 0f || (_health != null && _health.IsDead))
+        if (!_hasKnownPosition || HasActiveMovement || _aimRotationSpeed <= 0f ||
+            (_health != null && _health.IsDead))
             return;
 
         Vector3 direction = _lastKnownPosition - transform.position;
@@ -166,6 +199,7 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         CacheLocalReferences();
         UpdateConfirmedKnowledge();
         ObserveVisiblePlayerBehaviour();
+        UpdateMovementProgress();
         CompleteMovementIfArrived();
 
         if (_lastResult == null || Time.time >= _nextDecisionTime)
@@ -180,6 +214,7 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         UpdateConfirmedKnowledge();
 
         bool visible = _vision != null && _vision.CanSeeTarget;
+        bool hasActionableKnowledge = HasActionableKnowledge(visible);
         float distance = _hasKnownPosition
             ? Vector3.Distance(transform.position, _lastKnownPosition)
             : _vision != null ? _vision.Range : 35f;
@@ -192,23 +227,36 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         int maximumAmmo = _weapon != null ? _weapon.MagazineSize : 1;
         int ammo = _weapon != null ? _weapon.Ammo : 0;
 
-        WardenTacticalOption audibleAdvance = BuildAudibleAdvanceOption();
+        bool requireReveal = !visible && HasRecentVisualMemory();
+        WardenTacticalOption advanceOption = BuildAdvanceOption(
+            visible,
+            hasActionableKnowledge,
+            optionReference,
+            requireReveal);
+        WardenTacticalOption flankOption = BuildCoverOption(
+            _flankCover,
+            optionReference,
+            requireReveal);
+        WardenTacticalOption retreatOption = BuildCoverOption(
+            _retreatCover,
+            optionReference,
+            false);
 
         return new WardenDecisionState
         {
             IsOperational = operational,
             CanHoldPosition = operational,
             PlayerVisible = visible,
-            HasKnownPlayerPosition = _hasKnownPosition,
+            HasKnownPlayerPosition = hasActionableKnowledge,
             DistanceToPlayer = Mathf.Max(0f, distance),
             Ammo = Mathf.Clamp(ammo, 0, maximumAmmo),
             MaxAmmo = maximumAmmo,
             CurrentCoverUsable = currentCoverUsable,
             CurrentCoverQuality = currentCoverUsable ? _currentCover.Quality : 0f,
             Desperation = CalculateDesperation(),
-            AdvanceOption = audibleAdvance ?? BuildOption(_advanceCover, optionReference),
-            FlankOption = BuildOption(_flankCover, optionReference),
-            RetreatOption = BuildOption(_retreatCover, optionReference)
+            AdvanceOption = advanceOption,
+            FlankOption = flankOption,
+            RetreatOption = retreatOption
         };
     }
 
@@ -220,142 +268,103 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         ApplyDecision(_lastResult.SelectedAction);
     }
 
-    private bool TryApplyTerritorialMovement()
+    private WardenTacticalOption BuildAdvanceOption(
+        bool visible,
+        bool hasActionableKnowledge,
+        Vector3 knownPlayerPosition,
+        bool requireReveal)
     {
-        CacheGuardAnchor();
-        bool visible = _vision != null && _vision.CanSeeTarget && _playerTarget != null;
-        float distanceFromGuard = PlanarDistance(transform.position, _guardAnchor);
+        _plannedAdvanceCover = null;
+        _hasPlannedAdvanceDestination = false;
 
-        if (visible)
+        WardenTacticalOption audibleAdvance = BuildAudibleAdvanceOption();
+        if (audibleAdvance != null)
         {
-            float playerDistance = PlanarDistance(_playerTarget.position, transform.position);
-            bool playerCloseEnoughToChase = playerDistance <= _chaseActivationDistance;
-
-            if (playerCloseEnoughToChase &&
-                playerDistance > _chaseStopDistance + _coverArrivalDistance &&
-                distanceFromGuard < _maximumRoamDistance - _coverArrivalDistance)
-            {
-                Vector3 destination = BuildLeashedStandOffDestination(
-                    _playerTarget.position,
-                    _chaseStopDistance);
-                if (PlanarDistance(destination, transform.position) > _coverArrivalDistance)
-                {
-                    MoveToPosition(destination, MovementIntent.Pursuit);
-                    TryFireAtVisiblePlayer();
-                    return true;
-                }
-            }
-
-            if (playerCloseEnoughToChase)
-            {
-                // At firing distance or at the leash boundary, hold here and fight. Do not hand
-                // control back to a lateral cover choice that makes pursuit look directionless.
-                StopMovement();
-                TryFireAtVisiblePlayer();
-                return true;
-            }
-
-            if (distanceFromGuard > _coverArrivalDistance)
-            {
-                MoveToPosition(_guardAnchor, MovementIntent.ReturnToGuard);
-                TryFireAtVisiblePlayer();
-                return true;
-            }
-
-            if (_movementIntent == MovementIntent.Pursuit ||
-                _movementIntent == MovementIntent.Investigation ||
-                _movementIntent == MovementIntent.ReturnToGuard)
-            {
-                StopMovement();
-            }
-
-            return false;
+            _plannedAdvanceDestination = _investigationDestination;
+            _hasPlannedAdvanceDestination = true;
+            return audibleAdvance;
         }
 
-        float knowledgeAge = Time.time - _lastKnownTime;
-        bool knowledgeIsRecent = _hasKnownPosition &&
-                                 knowledgeAge >= 0f &&
-                                 knowledgeAge <= _lostTargetPursuitSeconds;
-        bool recentVisualMemory = knowledgeIsRecent &&
-                                  _vision != null &&
-                                  _vision.HasSeenTarget &&
-                                  _vision.LastSeenTime >= _lastKnownTime - 0.01f;
-
-        if (recentVisualMemory)
+        WardenTacticalOption authoredAdvance = BuildCoverOption(
+            _advanceCover,
+            knownPlayerPosition,
+            requireReveal);
+        if (authoredAdvance != null)
         {
-            WardenCoverPoint revealCover = SelectRevealCover();
-            if (revealCover != null)
-            {
-                MoveToCover(revealCover);
-                return true;
-            }
-
-            // No authored cover angle is available. Move to the confirmed last-seen position,
-            // rather than subtracting the hearing stand-off distance (which could send the
-            // Warden backwards when it was already close to the player).
-            Vector3 destination = BuildLeashedStandOffDestination(_lastKnownPosition, 0f);
-            if (PlanarDistance(destination, transform.position) > _coverArrivalDistance)
-            {
-                _investigationDestination = destination;
-                _hasInvestigationDestination = true;
-                MoveToPosition(destination, MovementIntent.Investigation);
-                return true;
-            }
+            _plannedAdvanceCover = _advanceCover;
+            return authoredAdvance;
         }
 
-        if (knowledgeIsRecent && _hasInvestigationDestination)
-        {
-            MoveToPosition(_investigationDestination, MovementIntent.Investigation);
-            return true;
-        }
+        if (!hasActionableKnowledge)
+            return null;
 
-        if (distanceFromGuard > _coverArrivalDistance)
-        {
-            MoveToPosition(_guardAnchor, MovementIntent.ReturnToGuard);
-            return true;
-        }
+        float standOff = visible ? _chaseStopDistance : 0f;
+        if (visible && PlanarDistance(transform.position, knownPlayerPosition) > _chaseActivationDistance)
+            return null;
 
-        if (_movementIntent == MovementIntent.Pursuit ||
-            _movementIntent == MovementIntent.Investigation ||
-            _movementIntent == MovementIntent.ReturnToGuard)
-        {
-            StopMovement();
-        }
+        Vector3 destination = BuildLeashedStandOffDestination(knownPlayerPosition, standOff);
+        if (PlanarDistance(destination, transform.position) <= _coverArrivalDistance)
+            return null;
 
-        return false;
+        _plannedAdvanceDestination = destination;
+        _hasPlannedAdvanceDestination = true;
+        return BuildPositionOption(destination, knownPlayerPosition, _investigationCoverQuality);
     }
 
-    private WardenCoverPoint SelectRevealCover()
-    {
-        WardenCoverPoint best = null;
-        float bestScore = float.NegativeInfinity;
-        ScoreRevealCover(_flankCover, 2f, ref best, ref bestScore);
-        ScoreRevealCover(_advanceCover, 1f, ref best, ref bestScore);
-        ScoreRevealCover(_retreatCover, 0f, ref best, ref bestScore);
-        return best;
-    }
-
-    private void ScoreRevealCover(
+    private WardenTacticalOption BuildCoverOption(
         WardenCoverPoint cover,
-        float rolePreference,
-        ref WardenCoverPoint best,
-        ref float bestScore)
+        Vector3 knownPlayerPosition,
+        bool requireReveal)
     {
-        if (cover == null || cover == _currentCover || !cover.CanUse(gameObject) ||
-            PlanarDistance(cover.Position, _guardAnchor) > _maximumRoamDistance)
+        if (cover == null || cover == _currentCover)
+            return null;
+
+        WardenTacticalOption option = cover.BuildOption(gameObject, knownPlayerPosition);
+        bool failedRecently = cover == _failedCover && Time.time < _failedCoverUntil;
+        bool insideTerritory = PlanarDistance(cover.Position, _guardAnchor) <= _maximumRoamDistance;
+        bool revealsMemory = !requireReveal || HasClearSearchLine(cover.Position);
+        option.PathAvailable = option.PathAvailable &&
+                               !failedRecently &&
+                               insideTerritory &&
+                               revealsMemory &&
+                               IsDestinationReachable(cover.Position, out _);
+        return option;
+    }
+
+    private WardenTacticalOption BuildPositionOption(
+        Vector3 destination,
+        Vector3 knownPlayerPosition,
+        float coverQuality)
+    {
+        return new WardenTacticalOption
         {
-            return;
-        }
+            PathAvailable = IsDestinationReachable(destination, out _),
+            CoverAvailable = true,
+            CoverOccupied = false,
+            CoverQuality = Mathf.Clamp01(coverQuality),
+            ResultingDistanceToPlayer = PlanarDistance(destination, knownPlayerPosition)
+        };
+    }
 
-        float currentDistance = PlanarDistance(transform.position, _lastKnownPosition);
-        float candidateDistance = PlanarDistance(cover.Position, _lastKnownPosition);
-        float clearSightBonus = HasClearSearchLine(cover.Position) ? 100f : 0f;
-        float score = clearSightBonus + currentDistance - candidateDistance + rolePreference;
-        if (score <= bestScore)
-            return;
+    private bool HasActionableKnowledge(bool visible)
+    {
+        if (visible)
+            return true;
+        if (!_hasKnownPosition)
+            return false;
 
-        best = cover;
-        bestScore = score;
+        float age = Time.time - _lastKnownTime;
+        return age >= 0f && age <= _lostTargetPursuitSeconds;
+    }
+
+    private bool HasRecentVisualMemory()
+    {
+        if (_vision == null || !_vision.HasSeenTarget)
+            return false;
+
+        float age = Time.time - _vision.LastSeenTime;
+        return age >= 0f && age <= _lostTargetPursuitSeconds &&
+               _vision.LastSeenTime >= _lastKnownTime - 0.01f;
     }
 
     private bool HasClearSearchLine(Vector3 candidatePosition)
@@ -373,12 +382,104 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         if (distance <= 0.01f)
             return true;
 
-        return !Physics.Raycast(
+        RaycastHit[] hits = Physics.RaycastAll(
             origin,
             toTarget / distance,
             distance,
             _vision.ObstacleLayers,
             QueryTriggerInteraction.Ignore);
+        if (hits == null || hits.Length == 0)
+            return true;
+
+        System.Array.Sort(hits, (first, second) => first.distance.CompareTo(second.distance));
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider collider = hits[i].collider;
+            if (collider == null || IsOwnCollider(collider.transform))
+                continue;
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool IsDestinationReachable(Vector3 destination, out Collider blocker)
+    {
+        blocker = null;
+        if (_characterController == null)
+            return true;
+
+        Vector3 travel = destination - transform.position;
+        travel.y = 0f;
+        float distance = travel.magnitude;
+        float castDistance = distance - _coverArrivalDistance;
+        if (castDistance <= 0f)
+            return true;
+
+        Vector3 scale = transform.lossyScale;
+        float radiusScale = Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z));
+        float radius = Mathf.Max(0.05f, _characterController.radius * radiusScale * 0.9f);
+        float height = Mathf.Max(
+            radius * 2f,
+            _characterController.height * Mathf.Abs(scale.y));
+        Vector3 center = transform.TransformPoint(_characterController.center);
+        float halfSegment = Mathf.Max(0f, height * 0.5f - radius);
+        Vector3 upper = center + Vector3.up * halfSegment;
+        Vector3 lower = center - Vector3.up * halfSegment;
+        int mask = _vision != null ? _vision.ObstacleLayers.value : ~0;
+        Vector3 destinationOffset = destination - transform.position;
+        Collider[] destinationHits = Physics.OverlapCapsule(
+            upper + destinationOffset,
+            lower + destinationOffset,
+            radius,
+            mask,
+            QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < destinationHits.Length; i++)
+        {
+            Collider candidate = destinationHits[i];
+            if (candidate == null || IsOwnCollider(candidate.transform))
+                continue;
+            if (candidate.bounds.max.y <= destination.y + 0.15f)
+                continue;
+
+            blocker = candidate;
+            _lastMovementBlocker = candidate;
+            return false;
+        }
+
+        RaycastHit[] hits = Physics.CapsuleCastAll(
+            upper,
+            lower,
+            radius,
+            travel / distance,
+            castDistance,
+            mask,
+            QueryTriggerInteraction.Ignore);
+        if (hits == null || hits.Length == 0)
+        {
+            _lastMovementBlocker = null;
+            return true;
+        }
+
+        System.Array.Sort(hits, (first, second) => first.distance.CompareTo(second.distance));
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider candidate = hits[i].collider;
+            if (candidate == null || IsOwnCollider(candidate.transform))
+                continue;
+
+            blocker = candidate;
+            _lastMovementBlocker = candidate;
+            return false;
+        }
+
+        _lastMovementBlocker = null;
+        return true;
+    }
+
+    private bool IsOwnCollider(Transform candidate)
+    {
+        return candidate != null && (candidate == transform || candidate.IsChildOf(transform));
     }
 
     private void ApplyDecision(WardenAction action)
@@ -386,59 +487,71 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         _command.Fire = false;
         _command.LookTarget = _hasKnownPosition ? _lastKnownPosition : transform.position + transform.forward;
         _command.AnimationIntent = action.ToString();
+        SetExecutedAction(action, string.Empty);
 
         if (_health != null && _health.IsDead)
         {
             StopMovement();
             _weapon?.CancelActions();
+            _executionConstraint = "Destroyed: no action executed.";
             return;
         }
 
         if (_weapon != null && _weapon.Ammo < _weapon.RequiredAmmoForBurst)
         {
             if (action == WardenAction.RetreatAndReload)
-                MoveToCover(_retreatCover);
-            else
+                MoveToCover(_retreatCover, action);
+            else if (!HasActiveMovement)
                 StopMovement();
             _command.AnimationIntent = "Reload";
             if (!_weapon.IsReloading && !_weapon.IsFiring)
                 _weapon.StartReload();
+            _executionConstraint = "Safety reload: fewer rounds remain than one complete burst.";
             return;
         }
 
-        // Territorial movement may own the current path, but it must never bypass death or
-        // mandatory reload handling above. In particular, an empty Warden used to keep trying
-        // RequestBurst forever without ever entering its reload state.
-        if (TryApplyTerritorialMovement())
+        if (PreserveActiveMovement(action))
             return;
 
         switch (action)
         {
             case WardenAction.PeekAndFire:
-                if (!ShouldPreserveCommittedCoverMovement())
-                    StopMovement();
+                StopMovement();
                 TryFireAtVisiblePlayer();
                 break;
 
             case WardenAction.AdvanceToCover:
-                if (_hasInvestigationDestination)
-                    MoveToPosition(_investigationDestination, MovementIntent.Investigation);
+                if (_plannedAdvanceCover != null)
+                    MoveToCover(_plannedAdvanceCover, action);
+                else if (_hasPlannedAdvanceDestination)
+                    MoveToPosition(
+                        _plannedAdvanceDestination,
+                        _hasInvestigationDestination ? MovementIntent.Investigation : MovementIntent.Pursuit,
+                        action);
                 else
-                    MoveToCover(_advanceCover);
+                    RejectExecution(action, "The planned advance destination became unavailable.");
                 break;
 
             case WardenAction.Flank:
-                MoveToCover(_flankCover);
+                MoveToCover(_flankCover, action);
                 break;
 
             case WardenAction.RetreatAndReload:
-                MoveToCover(_retreatCover);
+                MoveToCover(_retreatCover, action);
                 _weapon?.StartReload();
                 break;
 
             default:
-                if (!ShouldPreserveCommittedCoverMovement())
+                if (PlanarDistance(transform.position, _guardAnchor) > _coverArrivalDistance &&
+                    IsDestinationReachable(_guardAnchor, out _))
+                {
+                    MoveToPosition(_guardAnchor, MovementIntent.ReturnToGuard, action);
+                    _executionConstraint = "Hold executes as a return to the authored guard post.";
+                }
+                else
+                {
                     StopMovement();
+                }
                 if (_weapon != null && !_weapon.IsReloading)
                 {
                     bool outOfAmmo = _weapon.Ammo == 0;
@@ -453,49 +566,94 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         }
     }
 
-    private void MoveToCover(WardenCoverPoint cover)
+    private void MoveToCover(WardenCoverPoint cover, WardenAction action)
     {
-        if (cover == null || !cover.CanUse(gameObject))
+        Collider blocker = null;
+        if (cover == null || !cover.CanUse(gameObject) ||
+            !IsDestinationReachable(cover.Position, out blocker))
         {
-            StopMovement();
+            RejectExecution(
+                action,
+                blocker != null
+                    ? "Movement blocked by " + blocker.name + "."
+                    : "The selected cover is unavailable.");
             return;
         }
 
+        if (_movementTarget == cover && HasActiveMovement)
+            return;
+
         _movementTarget = cover;
         _command.Path = new[] { cover.Position };
-        SetMovementIntent(MovementIntent.TacticalCover);
+        SetMovementIntent(MovementIntent.TacticalCover, action);
     }
 
-    private void MoveToPosition(Vector3 position, MovementIntent intent = MovementIntent.Investigation)
+    private void MoveToPosition(Vector3 position, MovementIntent intent, WardenAction action)
     {
-        _movementTarget = null;
-        _command.Path = new[] { position };
-        SetMovementIntent(intent);
-    }
-
-    private void SetMovementIntent(MovementIntent intent)
-    {
-        if (_movementIntent != intent)
-            _movementCommitUntil = Time.time + _movementCommitmentSeconds;
-        _movementIntent = intent;
-    }
-
-    private bool ShouldPreserveCommittedCoverMovement()
-    {
-        if (_movementIntent != MovementIntent.TacticalCover ||
-            _command.Path == null ||
-            _command.Path.Length == 0)
+        if (!IsDestinationReachable(position, out Collider blocker))
         {
-            return false;
+            RejectExecution(
+                action,
+                blocker != null
+                    ? "Movement blocked by " + blocker.name + "."
+                    : "The selected destination is unreachable.");
+            return;
         }
 
-        return Time.time < _movementCommitUntil || _movementTarget != null;
+        if (_movementTarget == null && HasActiveMovement &&
+            PlanarDistance(_command.Path[_command.Path.Length - 1], position) < 0.05f)
+        {
+            return;
+        }
+
+        _movementTarget = null;
+        _command.Path = new[] { position };
+        SetMovementIntent(intent, action);
+    }
+
+    private void SetMovementIntent(MovementIntent intent, WardenAction action)
+    {
+        _movementIntent = intent;
+        _movementAction = action;
+        _movementCommitUntil = Time.time + _movementCommitmentSeconds;
+        _movementProgressPosition = transform.position;
+        _lastMovementProgressTime = Time.time;
+    }
+
+    private bool PreserveActiveMovement(WardenAction selectedAction)
+    {
+        if (!HasActiveMovement || _movementAction == selectedAction)
+            return false;
+
+        SetExecutedAction(
+            _movementAction,
+            "Finishing committed " + _movementAction +
+            " movement before switching to " + selectedAction + ".");
+        _command.AnimationIntent = _movementAction.ToString();
+        return true;
+    }
+
+    private bool HasActiveMovement =>
+        _command.Path != null &&
+        _command.Path.Length > 0;
+
+    private void SetExecutedAction(WardenAction action, string constraint)
+    {
+        _executedAction = action;
+        _hasExecutedAction = true;
+        _executionConstraint = constraint ?? string.Empty;
+    }
+
+    private void RejectExecution(WardenAction action, string reason)
+    {
+        StopMovement();
+        SetExecutedAction(action, reason);
     }
 
     private void TryFireAtVisiblePlayer()
     {
         if (_vision != null && _vision.CanSeeTarget && _playerTarget != null && _weapon != null)
-            _command.Fire = _weapon.RequestBurst(GetPlayerAimPoint());
+            _weapon.RequestBurst(GetPlayerAimPoint());
     }
 
     private void StopMovement()
@@ -504,6 +662,38 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         _command.Path = null;
         _movementIntent = MovementIntent.None;
         _movementCommitUntil = 0f;
+    }
+
+    private void UpdateMovementProgress()
+    {
+        if (!HasActiveMovement)
+            return;
+
+        if (PlanarDistance(transform.position, _movementProgressPosition) >= MovementProgressDistance)
+        {
+            _movementProgressPosition = transform.position;
+            _lastMovementProgressTime = Time.time;
+            return;
+        }
+
+        if (Time.time < _movementCommitUntil ||
+            Time.time - _lastMovementProgressTime < MovementStuckSeconds)
+        {
+            return;
+        }
+
+        WardenCoverPoint failed = _movementTarget;
+        if (failed != null)
+        {
+            _failedCover = failed;
+            _failedCoverUntil = Time.time + FailedDestinationCooldown;
+        }
+
+        string destination = CurrentDestination.HasValue
+            ? CurrentDestination.Value.ToString("F2")
+            : "unknown";
+        StopMovement();
+        _executionConstraint = "Movement aborted after no progress toward " + destination + ".";
     }
 
     private void CompleteMovementIfArrived()
@@ -647,13 +837,6 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
             _lastObservation = source + ": " + response;
     }
 
-    private WardenTacticalOption BuildOption(WardenCoverPoint cover, Vector3 knownPlayerPosition)
-    {
-        return cover != null && cover != _currentCover
-            ? cover.BuildOption(gameObject, knownPlayerPosition)
-            : null;
-    }
-
     private WardenTacticalOption BuildAudibleAdvanceOption()
     {
         _hasInvestigationDestination = false;
@@ -696,7 +879,7 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         _hasInvestigationDestination = true;
         return new WardenTacticalOption
         {
-            PathAvailable = true,
+            PathAvailable = IsDestinationReachable(destination, out _),
             CoverAvailable = true,
             CoverOccupied = false,
             CoverQuality = _investigationCoverQuality,
@@ -740,6 +923,8 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
         if (_hearing == null) _hearing = GetComponent<HearingSensor>();
         if (_weapon == null) _weapon = GetComponent<WardenWeapon>();
         if (_health == null) _health = GetComponent<Health>();
+        if (_characterController == null) _characterController = GetComponent<CharacterController>();
+        if (_agentMotor == null) _agentMotor = GetComponent<AgentMotor>();
         SetHealthSubscription(_health);
         CachePlayerReferences();
     }
@@ -874,13 +1059,27 @@ public sealed class WardenGameplayController : MonoBehaviour, IAgentBrain
 
         EnsureStyles();
         float width = Mathf.Min(620f, Screen.width - 20f);
-        GUILayout.BeginArea(new Rect(Screen.width - width - 10f, 10f, width, 390f), GUI.skin.box);
+        GUILayout.BeginArea(new Rect(Screen.width - width - 10f, 10f, width, 470f), GUI.skin.box);
         GUILayout.Label("WARDEN LIVE EXPECTIMAX", _titleStyle);
         GUILayout.Label("Selected: " + _lastResult.SelectedAction, _selectedStyle);
+        GUILayout.Label(
+            "Executed: " + (_hasExecutedAction ? _executedAction.ToString() : "None") +
+            (string.IsNullOrEmpty(_executionConstraint) ? string.Empty : " | " + _executionConstraint),
+            _warningStyle);
         GUILayout.Label(
             $"Vision now:{(_vision != null && _vision.CanSeeTarget)}  Heard memory:{(_hearing != null && _hearing.HasHeardNoise)}  " +
             $"Ammo:{(_weapon != null ? _weapon.Ammo : 0)}/{(_weapon != null ? _weapon.MagazineSize : 0)}  " +
             $"Leaves:{_lastResult.EvaluatedLeafCount}",
+            _bodyStyle);
+        string destination = CurrentDestination.HasValue
+            ? CurrentDestination.Value.ToString("F2")
+            : "none";
+        GUILayout.Label(
+            $"Movement:{_movementIntent}  Destination:{destination}  Velocity:{ActualVelocity.magnitude:0.00} m/s",
+            _bodyStyle);
+        GUILayout.Label(
+            $"Vision blocker:{(_vision != null ? _vision.LastObstructionName : string.Empty)}  " +
+            $"Route blocker:{MovementBlockerName}  Last seen:{_lastKnownPosition:F2} at {_lastKnownTime:0.00}",
             _bodyStyle);
         string playerHp = _playerHealth != null
             ? (_playerHealth.IsDead ? "0 (DEAD)" : Mathf.CeilToInt(_playerHealth.Current).ToString())

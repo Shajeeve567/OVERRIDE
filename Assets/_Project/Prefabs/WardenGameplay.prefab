@@ -165,6 +165,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 513
   _checkInterval: 0.2
+  _logObstructions: 1
 --- !u!143 &6616547432096836594
 CharacterController:
   m_ObjectHideFlags: 0

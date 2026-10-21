@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 /// <summary>
@@ -19,8 +20,12 @@ public sealed class VisionSensor : MonoBehaviour
     [SerializeField] private LayerMask _obstacleLayers;
     [SerializeField, Min(0f)] private float _checkInterval = 0.2f;
 
+    [Header("Diagnostics")]
+    [SerializeField] private bool _logObstructions;
+
     private Transform _cachedTransform;
     private float _nextCheckTime;
+    private Collider _lastLoggedObstruction;
 
     public Transform Eye
     {
@@ -62,10 +67,20 @@ public sealed class VisionSensor : MonoBehaviour
         set => _checkInterval = Mathf.Max(0f, value);
     }
 
+    public bool LogObstructions
+    {
+        get => _logObstructions;
+        set => _logObstructions = value;
+    }
+
     public bool CanSeeTarget { get; private set; }
     public bool HasSeenTarget { get; private set; }
     public Vector3 LastSeenPosition { get; private set; }
     public float LastSeenTime { get; private set; } = float.NegativeInfinity;
+    public Collider LastObstructionCollider { get; private set; }
+    public string LastObstructionName => LastObstructionCollider != null
+        ? LastObstructionCollider.name
+        : string.Empty;
 
     private Transform SensorEye => _eye != null ? _eye : _cachedTransform;
 
@@ -113,6 +128,7 @@ public sealed class VisionSensor : MonoBehaviour
 
     private bool EvaluateVisibility()
     {
+        SetObstruction(null);
         if (!IsTargetAvailable()) return false;
 
         Transform eye = SensorEye;
@@ -131,16 +147,26 @@ public sealed class VisionSensor : MonoBehaviour
             float minimumDot = Mathf.Cos(halfFieldOfView * Mathf.Deg2Rad);
             if (Vector3.Dot(eye.forward, direction) < minimumDot) return false;
 
-            if (Physics.Raycast(
-                    eye.position,
-                    direction,
-                    out RaycastHit hit,
-                    distance,
-                    _obstacleLayers,
-                    QueryTriggerInteraction.Ignore) &&
-                !IsTargetTransform(hit.transform))
+            RaycastHit[] hits = Physics.RaycastAll(
+                eye.position,
+                direction,
+                distance,
+                _obstacleLayers,
+                QueryTriggerInteraction.Ignore);
+            if (hits != null && hits.Length > 0)
             {
-                return false;
+                Array.Sort(hits, (first, second) => first.distance.CompareTo(second.distance));
+                for (int i = 0; i < hits.Length; i++)
+                {
+                    RaycastHit hit = hits[i];
+                    if (hit.collider == null || IsSelfTransform(hit.transform))
+                        continue;
+                    if (IsTargetTransform(hit.transform))
+                        return true;
+
+                    SetObstruction(hit.collider);
+                    return false;
+                }
             }
         }
 
@@ -155,6 +181,25 @@ public sealed class VisionSensor : MonoBehaviour
     private bool IsTargetTransform(Transform candidate)
     {
         return candidate != null && (candidate == _target || candidate.IsChildOf(_target));
+    }
+
+    private bool IsSelfTransform(Transform candidate)
+    {
+        Transform owner = _cachedTransform != null ? _cachedTransform : transform;
+        return candidate != null && (candidate == owner || candidate.IsChildOf(owner));
+    }
+
+    private void SetObstruction(Collider obstruction)
+    {
+        LastObstructionCollider = obstruction;
+        if (!_logObstructions || obstruction == null || obstruction == _lastLoggedObstruction)
+            return;
+
+        _lastLoggedObstruction = obstruction;
+        Debug.Log(
+            $"[VisionSensor:{name}] Visibility blocked by '{obstruction.name}' " +
+            $"on layer {LayerMask.LayerToName(obstruction.gameObject.layer)}.",
+            obstruction);
     }
 
     private void CacheReferences()

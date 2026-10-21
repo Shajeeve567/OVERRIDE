@@ -5,7 +5,9 @@ using System.Reflection;
 using NUnit.Framework;
 using Override.WardenAI;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Override.WardenGameplay.Tests
 {
@@ -420,7 +422,7 @@ namespace Override.WardenGameplay.Tests
         }
 
         [Test]
-        public void NearbyVisiblePlayer_WhenOutsideGuardActivationRadius_IsChasedTowardLeash()
+        public void AdvanceAction_ExecutesLeashedExpectimaxMovementOption()
         {
             GameObject warden = CreateObject("Warden");
             GameObject player = CreateObject("Player");
@@ -442,7 +444,12 @@ namespace Override.WardenGameplay.Tests
                     guardCover, null, null, null });
             Assert.That(Invoke<bool>(vision, "CheckVisibilityNow"), Is.True);
 
-            object command = InvokeControllerTick(controller);
+            WardenDecisionState state = Invoke<WardenDecisionState>(controller, "BuildDecisionStateNow");
+            Assert.That(state.AdvanceOption, Is.Not.Null);
+            Assert.That(state.AdvanceOption.PathAvailable, Is.True);
+
+            Invoke(controller, "ApplyDecision", WardenAction.AdvanceToCover);
+            object command = Read<object>(controller, "CurrentCommand");
             Vector3[] path = (Vector3[])command.GetType().GetField("Path").GetValue(command);
 
             Assert.That(Read<bool>(controller, "IsPursuing"), Is.True);
@@ -523,7 +530,7 @@ namespace Override.WardenGameplay.Tests
             Component controller = warden.AddComponent(_controllerType);
             Invoke(controller, "Awake");
 
-            Invoke(controller, "MoveToCover", destination);
+            Invoke(controller, "MoveToCover", destination, WardenAction.Flank);
             Invoke(controller, "ApplyDecision", WardenAction.PeekAndFire);
 
             FieldInfo commandField = _controllerType.GetField("_command", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -557,7 +564,7 @@ namespace Override.WardenGameplay.Tests
         }
 
         [Test]
-        public void UpdateFacing_WhilePathIsActive_StillFacesKnownPlayerPosition()
+        public void UpdateFacing_WhilePathIsActive_DoesNotFightMotorRotation()
         {
             GameObject warden = CreateObject("Warden");
             warden.transform.position = Vector3.zero;
@@ -588,9 +595,7 @@ namespace Override.WardenGameplay.Tests
             MethodInfo updateFacing = _controllerType.GetMethod("UpdateFacing", BindingFlags.Instance | BindingFlags.Public);
             updateFacing.Invoke(controller, new object[] { 1f });
 
-            float angleAfter = Vector3.Angle(warden.transform.forward, Vector3.right);
-            Assert.That(angleAfter, Is.LessThan(90f));
-            Assert.That(warden.transform.forward.x, Is.GreaterThan(0.1f));
+            Assert.That(warden.transform.rotation, Is.EqualTo(Quaternion.identity));
         }
 
         [Test]
@@ -632,6 +637,100 @@ namespace Override.WardenGameplay.Tests
             Assert.That(Read<Transform>(vision, "Target"), Is.SameAs(player.transform));
         }
 
+        [Test]
+        public void Vision_IgnoresOwnerCollidersButReportsRealCover()
+        {
+            GameObject warden = CreateObject("Warden");
+            GameObject ownBody = CreateObject("Own Body");
+            ownBody.transform.SetParent(warden.transform);
+            ownBody.transform.localPosition = new Vector3(0f, 0f, 2f);
+            ownBody.AddComponent<BoxCollider>().size = Vector3.one;
+
+            GameObject player = CreateObject("Player");
+            player.transform.position = new Vector3(0f, 0f, 8f);
+            player.AddComponent<BoxCollider>();
+
+            Component vision = warden.AddComponent(_visionType);
+            Set(vision, "Target", player.transform);
+            Set(vision, "Range", 20f);
+            Set(vision, "FieldOfView", 120f);
+            Set(vision, "ObstacleLayers", (LayerMask)(1 << 0));
+            Physics.SyncTransforms();
+
+            Assert.That(Invoke<bool>(vision, "CheckVisibilityNow"), Is.True,
+                "A collider owned by the sensor hierarchy must not block its own sight.");
+
+            GameObject wall = CreateObject("Real Cover");
+            wall.transform.position = new Vector3(0f, 0f, 4f);
+            BoxCollider wallCollider = wall.AddComponent<BoxCollider>();
+            Physics.SyncTransforms();
+
+            Assert.That(Invoke<bool>(vision, "CheckVisibilityNow"), Is.False);
+            Assert.That(Read<Collider>(vision, "LastObstructionCollider"), Is.SameAs(wallCollider));
+        }
+
+        [Test]
+        public void Tick_ExecutesExpectimaxSelectedActionWithoutTerritorialOverride()
+        {
+            GameObject warden = CreateObject("Warden");
+            GameObject player = CreateObject("Player");
+            player.transform.position = new Vector3(0f, 0f, 10f);
+            player.AddComponent<BoxCollider>();
+
+            Component vision = warden.AddComponent(_visionType);
+            Component weapon = warden.AddComponent(_weaponType);
+            Component controller = warden.AddComponent(_controllerType);
+            Set(vision, "Target", player.transform);
+            Set(vision, "Range", 30f);
+            Set(vision, "FieldOfView", 120f);
+            Set(vision, "ObstacleLayers", (LayerMask)0);
+            Invoke(weapon, "Awake");
+            Invoke(controller, "Awake");
+            _controllerType.GetMethod("Configure", BindingFlags.Instance | BindingFlags.Public).Invoke(
+                controller,
+                new object[] { vision, null, weapon, null, player.transform, null,
+                    null, null, null, null });
+            Assert.That(Invoke<bool>(vision, "CheckVisibilityNow"), Is.True);
+
+            InvokeControllerTick(controller);
+            WardenDecisionResult result = Read<WardenDecisionResult>(controller, "LastResult");
+
+            Assert.That(Read<bool>(controller, "HasExecutedAction"), Is.True);
+            Assert.That(Read<WardenAction>(controller, "ExecutedAction"), Is.EqualTo(result.SelectedAction));
+            Assert.That(Read<string>(controller, "ExecutionConstraint"), Is.Empty);
+        }
+
+        [Test]
+        public void CoverBehindSolidObstacle_IsFilteredAsUnreachable()
+        {
+            GameObject warden = CreateObject("Warden");
+            GameObject player = CreateObject("Player");
+            player.transform.position = new Vector3(0f, 0f, 10f);
+            Component flank = CreateComponent("Flank", _coverType);
+            flank.transform.position = new Vector3(0f, 0f, 8f);
+
+            GameObject wall = CreateObject("Route Wall");
+            wall.transform.position = new Vector3(0f, 1f, 4f);
+            wall.AddComponent<BoxCollider>().size = new Vector3(4f, 2f, 1f);
+
+            Component vision = warden.AddComponent(_visionType);
+            Component controller = warden.AddComponent(_controllerType);
+            Set(vision, "Target", player.transform);
+            Set(vision, "ObstacleLayers", (LayerMask)(1 << 0));
+            Invoke(controller, "Awake");
+            _controllerType.GetMethod("Configure", BindingFlags.Instance | BindingFlags.Public).Invoke(
+                controller,
+                new object[] { vision, null, null, null, player.transform, null,
+                    null, null, flank, null });
+            Physics.SyncTransforms();
+
+            WardenDecisionState state = Invoke<WardenDecisionState>(controller, "BuildDecisionStateNow");
+
+            Assert.That(state.FlankOption, Is.Not.Null);
+            Assert.That(state.FlankOption.PathAvailable, Is.False);
+            Assert.That(Read<string>(controller, "MovementBlockerName"), Is.EqualTo("Route Wall"));
+        }
+
         [TestCase("Assets/_Project/Prefabs/WardenGameplay.prefab", 77f)]
         [TestCase("Assets/_Project/Prefabs/Visuals/WardenVisual.prefab", 39f)]
         public void WardenPrefab_WeakPointCollidersHaveSafeWorldDimensions(
@@ -664,6 +763,111 @@ namespace Override.WardenGameplay.Tests
 
             Assert.That(eyeCollider.bounds.size.x, Is.LessThan(0.4f));
             Assert.That(rearCollider.bounds.size.magnitude, Is.LessThan(0.7f));
+        }
+
+        [Test]
+        public void WardenGameplayPrefab_PerceptionMasksIncludeGreyboxDefaultLayer()
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/_Project/Prefabs/WardenGameplay.prefab");
+            Assert.That(prefab, Is.Not.Null);
+
+            Component vision = prefab.GetComponent(_visionType);
+            Component hearing = prefab.GetComponent(_hearingType);
+            Assert.That(vision, Is.Not.Null);
+            Assert.That(hearing, Is.Not.Null);
+
+            Assert.That(Read<LayerMask>(vision, "ObstacleLayers").value & 1, Is.Not.Zero);
+            Assert.That(Read<LayerMask>(hearing, "ObstacleLayers").value & 1, Is.Not.Zero);
+        }
+
+        [Test]
+        public void GreyboxV2_AllThreeWardensHaveIndependentValidWiringAndRoutes()
+        {
+            const string scenePath = "Assets/OVERRIDE/Greybox/Greybox_v2.unity";
+            Scene existing = SceneManager.GetSceneByPath(scenePath);
+            bool openedForTest = !existing.IsValid() || !existing.isLoaded;
+            Scene scene = openedForTest
+                ? EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive)
+                : existing;
+
+            try
+            {
+                var wardens = new List<Component>();
+                foreach (GameObject root in scene.GetRootGameObjects())
+                    wardens.AddRange(root.GetComponentsInChildren(_controllerType, true));
+
+                Assert.That(wardens.Count, Is.EqualTo(3));
+                var currentCovers = new HashSet<Component>();
+                var advanceCovers = new HashSet<Component>();
+                var flankCovers = new HashSet<Component>();
+                var retreatCovers = new HashSet<Component>();
+                var allCovers = new HashSet<Component>();
+
+                foreach (Component controller in wardens)
+                {
+                    Invoke(controller, "CacheLocalReferences");
+                    Invoke(controller, "CacheGuardAnchor");
+
+                    Transform player = Read<Transform>(controller, "PlayerTarget");
+                    Component director = Read<Component>(controller, "Director");
+                    Component current = Read<Component>(controller, "CurrentCover");
+                    Component advance = Read<Component>(controller, "AdvanceCover");
+                    Component flank = Read<Component>(controller, "FlankCover");
+                    Component retreat = Read<Component>(controller, "RetreatCover");
+                    Component vision = controller.GetComponent(_visionType);
+                    Component hearing = controller.GetComponent(_hearingType);
+
+                    Assert.That(player, Is.Not.Null, controller.name + " has no player target.");
+                    Assert.That(director, Is.Not.Null, controller.name + " has no Director.");
+                    Assert.That(current, Is.Not.Null, controller.name + " has no current cover.");
+                    Assert.That(advance, Is.Not.Null, controller.name + " has no advance cover.");
+                    Assert.That(flank, Is.Not.Null, controller.name + " has no flank cover.");
+                    Assert.That(retreat, Is.Not.Null, controller.name + " has no retreat cover.");
+                    Assert.That(Read<Transform>(vision, "Target"), Is.SameAs(player));
+                    Assert.That(Read<LayerMask>(vision, "ObstacleLayers").value & 1, Is.Not.Zero);
+                    Assert.That(Read<LayerMask>(hearing, "ObstacleLayers").value & 1, Is.Not.Zero);
+                    Assert.That(Read<Vector3>(controller, "GuardAnchor"),
+                        Is.EqualTo(current.transform.position));
+
+                    Assert.That(currentCovers.Add(current), Is.True, "Current cover is shared.");
+                    Assert.That(advanceCovers.Add(advance), Is.True, "Advance cover is shared.");
+                    Assert.That(flankCovers.Add(flank), Is.True, "Flank cover is shared.");
+                    Assert.That(retreatCovers.Add(retreat), Is.True, "Retreat cover is shared.");
+                    Assert.That(allCovers.Add(current), Is.True, "A cover marker is reused across Wardens or roles.");
+                    Assert.That(allCovers.Add(advance), Is.True, "A cover marker is reused across Wardens or roles.");
+                    Assert.That(allCovers.Add(flank), Is.True, "A cover marker is reused across Wardens or roles.");
+                    Assert.That(allCovers.Add(retreat), Is.True, "A cover marker is reused across Wardens or roles.");
+
+                    bool advanceReachable = IsRouteReachable(
+                        controller, advance.transform.position, out string advanceBlocker);
+                    bool flankReachable = IsRouteReachable(
+                        controller, flank.transform.position, out string flankBlocker);
+                    bool retreatReachable = IsRouteReachable(
+                        controller, retreat.transform.position, out string retreatBlocker);
+                    TestContext.Progress.WriteLine(
+                        $"{controller.name} pos={controller.transform.position:F2} " +
+                        $"guard={current.transform.position:F2}; " +
+                        $"advance={advance.transform.position:F2} reachable={advanceReachable} blocker={advanceBlocker}; " +
+                        $"flank={flank.transform.position:F2} reachable={flankReachable} blocker={flankBlocker}; " +
+                        $"retreat={retreat.transform.position:F2} reachable={retreatReachable} blocker={retreatBlocker}");
+                    Assert.That(advanceReachable || flankReachable || retreatReachable, Is.True,
+                        controller.name + " has no physically reachable authored tactical route.");
+
+                    WardenDecisionState state = Invoke<WardenDecisionState>(controller, "BuildDecisionStateNow");
+                    if (!advanceReachable && state.AdvanceOption != null)
+                        Assert.That(state.AdvanceOption.PathAvailable, Is.False);
+                    if (!flankReachable && state.FlankOption != null)
+                        Assert.That(state.FlankOption.PathAvailable, Is.False);
+                    if (!retreatReachable && state.RetreatOption != null)
+                        Assert.That(state.RetreatOption.PathAvailable, Is.False);
+                }
+            }
+            finally
+            {
+                if (openedForTest && scene.IsValid() && scene.isLoaded)
+                    EditorSceneManager.CloseScene(scene, true);
+            }
         }
 
         private Component CreateComponent(string name, Type type)
@@ -727,6 +931,18 @@ namespace Override.WardenGameplay.Tests
                     candidate.Name == methodName && candidate.GetParameters().Length == argumentCount);
             Assert.That(method, Is.Not.Null, "Missing method: " + methodName);
             return method;
+        }
+
+        private static bool IsRouteReachable(
+            Component controller,
+            Vector3 destination,
+            out string blockerName)
+        {
+            MethodInfo method = FindMethod(controller.GetType(), "IsDestinationReachable", 2);
+            object[] arguments = { destination, null };
+            bool reachable = (bool)method.Invoke(controller, arguments);
+            blockerName = arguments[1] is Collider collider ? collider.name : string.Empty;
+            return reachable;
         }
 
         private static Vector3 Absolute(Vector3 value)

@@ -195,6 +195,7 @@ public static class WardenGameplayIntegrationBuilder
             WardenWeakPointColliderUtility.Configure(portable);
             vision.Target = null;
             vision.ObstacleLayers = vision.ObstacleLayers.value | (1 << 0);
+            vision.LogObstructions = true;
             hearing.HearingRange = 15f;
             hearing.SensitivityMultiplier = 1f;
             hearing.ObstacleLayers = vision.ObstacleLayers;
