@@ -79,6 +79,13 @@ namespace Override.HunterAI
             }
         }
 
+        /// The general Bayes update: multiply each cell by its likelihood weight (normalise afterwards).
+        /// ApplyGaussian and ApplyNotFound are the two specific likelihoods the Seeker uses in play.
+        public void ApplyLikelihood(float[] likelihood)
+        {
+            for (int i = 0; i < belief.Length; i++) belief[i] *= likelihood[i];
+        }
+
         /// NEGATIVE evidence: "I'm here and I don't sense the player". Cells within the sense radius
         /// are multiplied by (1 − p_d), so searching an empty area drains its probability.
         public void ApplyNotFound(Vector3 at, float radius, float detectionProbability)
