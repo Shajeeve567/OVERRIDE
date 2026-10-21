@@ -7,9 +7,11 @@
 //   - a scan line sweeping down the screen (ARGUS watching)
 //   - a pulsing red ring with rotating segments behind the title (ARGUS's eye)
 //   - slowly rising dust specks
+//   - the game's ambient music pad underneath (synthesized, see SoundSynth)
 //
 // Put it on any object in the MainMenu scene.
 
+using Override.Audio;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -23,11 +25,19 @@ namespace Override.UI
         [SerializeField] Color dustColour = new Color(0.7f, 0.8f, 0.85f, 0.35f);
         [SerializeField] float gridSpeed = 0.25f;     // grid rows per second
         [SerializeField] int dustCount = 60;
+        [Range(0f, 1f)] [SerializeField] float musicVolume = 0.4f;
 
         Backdrop backdrop;
 
         void Start()
         {
+            SoundSynth.Build();
+            var music = gameObject.AddComponent<AudioSource>();
+            music.clip = SoundSynth.AmbientPad;
+            music.loop = true;
+            music.volume = musicVolume;
+            music.Play();
+
             var document = FindFirstObjectByType<UIDocument>();
             if (document == null) { Debug.LogWarning("[MenuBackground] No UIDocument in the scene."); return; }
 

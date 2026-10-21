@@ -7,10 +7,13 @@
 //
 // World sounds are 3D, played from a fixed POOL of AudioSources (no objects created during play).
 // Feedback sounds (hit ticks, the spotted sting) are 2D, from one source on this object.
+// MUSIC: an ambient pad always plays; a tension layer fades in with the Director's alarm level,
+// while a camera sees you, and fully during the final wave.
 // Put it on one object in the gameplay scene.
 
 using Override.Combat;
 using Override.Core;
+using Override.Director;
 using Override.Hunter;
 using UnityEngine;
 
@@ -21,6 +24,8 @@ namespace Override.Audio
         [Range(0f, 1f)] [SerializeField] float masterVolume = 0.8f;
         [SerializeField] int poolSize = 24;
         [SerializeField] float spottedCooldown = 4f;   // the sting once per sighting, not twice a second
+        [Range(0f, 1f)] [SerializeField] float musicVolume = 0.5f;
+        [SerializeField] float tensionFade = 0.5f;      // how fast the tension layer follows (per second)
 
         AudioSource[] pool;
         int next;
@@ -28,6 +33,9 @@ namespace Override.Audio
         HitscanRifle rifle;
         Transform player;
         float nextSpotted;
+        AudioSource tension;
+        DirectorController director;
+        float lastSpotted = -10f;
 
         void Awake()
         {
@@ -50,6 +58,31 @@ namespace Override.Audio
             ui = gameObject.AddComponent<AudioSource>();
             ui.playOnAwake = false;
             ui.spatialBlend = 0f;                             // 2D: feedback, not a place in the world
+
+            MusicSource(SoundSynth.AmbientPad, musicVolume);
+            tension = MusicSource(SoundSynth.TensionPulse, 0f);
+        }
+
+        AudioSource MusicSource(AudioClip clip, float volume)
+        {
+            var src = gameObject.AddComponent<AudioSource>();
+            src.clip = clip;
+            src.loop = true;
+            src.spatialBlend = 0f;
+            src.volume = volume * masterVolume;
+            src.Play();
+            return src;
+        }
+
+        void Update()
+        {
+            // Tension target: the alarm (0-100), a recent camera sighting, or the final wave.
+            float target = director != null ? director.Alarm / 100f : 0f;
+            if (Time.time - lastSpotted < 3f) target = Mathf.Max(target, 0.7f);
+            if (director != null && director.FinalWave) target = 1f;
+            float now = tension.volume / Mathf.Max(0.0001f, musicVolume * masterVolume);
+            now = Mathf.MoveTowards(now, target, tensionFade * Time.deltaTime);
+            tension.volume = now * musicVolume * masterVolume;
         }
 
         void OnEnable()
@@ -76,6 +109,7 @@ namespace Override.Audio
 
         void Start()
         {
+            director = FindFirstObjectByType<DirectorController>();
             var p = GameObject.FindWithTag("Player");
             if (p != null)
             {
@@ -152,6 +186,7 @@ namespace Override.Audio
 
         void OnSpotted(Vector3 at)
         {
+            lastSpotted = Time.time;
             if (Time.time < nextSpotted) return;
             nextSpotted = Time.time + spottedCooldown;
             ui.PlayOneShot(SoundSynth.Spotted, 0.8f * masterVolume);

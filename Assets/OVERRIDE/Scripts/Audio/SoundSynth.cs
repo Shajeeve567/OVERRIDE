@@ -20,7 +20,7 @@ namespace Override.Audio
 
         public static AudioClip Gunshot, Footstep, DoorSlide, DoorHinge, CrateScrape, CanisterClank,
                                 HackBeep, TerminalDone, HitTick, KillTick, ReloadClick, DryClick,
-                                Hurt, Spotted, SeekerHum, SeekerLunge;
+                                Hurt, Spotted, SeekerHum, SeekerLunge, AmbientPad, TensionPulse;
 
         /// Builds every clip (about 5 ms in total). Safe to call more than once.
         public static void Build()
@@ -49,6 +49,15 @@ namespace Override.Audio
             Spotted = Make("Spotted", 0.45f, t => Sine(t, t < 0.2f ? 740f : 554f) * Gate(t, 0.42f) * 0.3f);
             SeekerHum = Make("SeekerHum", 2f, t => (Sine(t, 70f) * 0.6f + Sine(t, 140.5f) * 0.25f)
                                                   * (0.8f + 0.2f * Mathf.Sin(t * Mathf.PI * 2f)) * 0.5f);   // 2 s loop
+            // Music (GDD: "ambient hum, with a tension layer added when the alarm is high").
+            // Loops are seamless because every frequency completes a whole number of cycles in the loop:
+            // 8 s pad: 55, 82.5, 110 and 164.75 Hz (440, 660, 880, 1318 cycles), swelling at 0.25 Hz.
+            AmbientPad = Make("AmbientPad", 8f, t => (Sine(t, 55f) * 0.5f + Sine(t, 82.5f) * 0.3f + Sine(t, 110f) * 0.2f
+                                                      + Sine(t, 164.75f) * 0.12f)
+                                                     * (0.75f + 0.25f * Mathf.Sin(t * Mathf.PI * 0.5f)) * 0.35f);
+            // 2 s tension layer at 120 bpm: a low pulse on each beat, a high tick on the off-beats.
+            TensionPulse = Make("TensionPulse", 2f, t => Sine(t, 41f) * Env(t % 0.5f, 0.005f, 0.12f) * 0.6f
+                                                        + Sine(t, 1760f) * Env((t + 0.25f) % 0.5f, 0.001f, 0.01f) * 0.12f);
             SeekerLunge = Make("SeekerLunge", 0.35f, t => (LowNoise(0.4f) * 0.6f + Sine(t, 160f - 200f * t) * 0.5f)
                                                          * Bell(t, 0.35f) * 0.8f);
         }
