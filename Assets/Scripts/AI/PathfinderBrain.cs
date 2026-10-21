@@ -187,8 +187,9 @@ namespace Override.AI
             }
             else
             {
-                cmd.Path = allowDirectChaseFallback
-                    ? new Vector3[] { currentTarget }
+                cmd.Path = allowDirectChaseFallback &&
+                           HasClearDirectPathTo(lastSeenPlayerPosition + Vector3.up * 1f)
+                    ? new Vector3[] { lastSeenPlayerPosition }
                     : new Vector3[] { transform.position };
             }
 
@@ -276,6 +277,11 @@ namespace Override.AI
             Vector3 target = playerController != null
                 ? playerController.bounds.center
                 : playerPos + Vector3.up * 1f;
+            return HasClearDirectPathTo(target);
+        }
+
+        private bool HasClearDirectPathTo(Vector3 target)
+        {
             Vector3 delta = target - transform.position;
             float distance = delta.magnitude;
 
