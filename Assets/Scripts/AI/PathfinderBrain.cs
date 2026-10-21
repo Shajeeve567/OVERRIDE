@@ -12,6 +12,9 @@ namespace Override.AI
         private const float AttackRange = 15f;
         private const float BayExitRadius = 1.5f;
         private const float DirectChaseRadius = 0.45f;
+        private const float LostSightToAmbushDelay = 2f;
+        private const float TargetSwitchCooldown = 1.5f;
+        private const float TerminalAmbushRange = 15f;
         private const int LineOfSightHitCapacity = 32;
 
         [SerializeField] private bool allowDirectChaseFallback = true;
@@ -30,6 +33,12 @@ namespace Override.AI
         private float pathRefreshRate = 0.5f;
         private Transform[] terminals;
 
+        private Vector3 lastSeenPlayerPosition;
+        private Vector3 currentTarget;
+        private float timeSinceLosLost;
+        private float lastTargetChangeTime;
+        private bool isTerminalAmbush;
+
         private Vector3 lastPlayerPosition;
         private Vector3 lastPlayerForward = Vector3.forward;
         private bool showPathDebug;
@@ -41,6 +50,12 @@ namespace Override.AI
             playerController = playerTransform != null
                 ? playerTransform.GetComponent<CharacterController>()
                 : null;
+
+            lastSeenPlayerPosition = playerTransform != null ? playerTransform.position : waypoint;
+            currentTarget = lastSeenPlayerPosition;
+            timeSinceLosLost = 0f;
+            lastTargetChangeTime = Time.time;
+            isTerminalAmbush = false;
 
             if (currentPath == null) currentPath = new List<Vector3>();
             else currentPath.Clear();
@@ -57,6 +72,8 @@ namespace Override.AI
         private void Awake()
         {
             wispVisuals = GetComponentInChildren<WispVisuals>(true);
+            lastSeenPlayerPosition = transform.position;
+            currentTarget = transform.position;
         }
 
         private void Start()
@@ -117,6 +134,8 @@ namespace Override.AI
             float distToPlayer = Vector3.Distance(transform.position, snapshot.PlayerPosition);
             bool hasLineOfSight = HasLineOfSight(snapshot.PlayerPosition);
 
+            UpdateTargetKnowledge(snapshot.PlayerPosition, hasLineOfSight);
+
             if (distToPlayer < AttackRange && hasLineOfSight)
             {
                 currentPath.Clear();
@@ -131,7 +150,27 @@ namespace Override.AI
                 return cmd;
             }
 
-            Vector3 predictedTarget = GetPredictedTarget(snapshot.PlayerPosition, hasLineOfSight);
+            bool wantsTerminalAmbush = ShouldUseTerminalAmbush(
+                snapshot.PlayerPosition,
+                hasLineOfSight,
+                out Transform ambushTerminal);
+
+            if (wantsTerminalAmbush != isTerminalAmbush &&
+                Time.time - lastTargetChangeTime >= TargetSwitchCooldown)
+            {
+                isTerminalAmbush = wantsTerminalAmbush;
+                lastTargetChangeTime = Time.time;
+                lastPathTime = -999f;
+            }
+
+            if (isTerminalAmbush)
+            {
+                if (ambushTerminal != null) currentTarget = ambushTerminal.position;
+            }
+            else
+            {
+                currentTarget = lastSeenPlayerPosition;
+            }
 
             if (Time.time - lastPathTime > pathRefreshRate)
             {
@@ -139,7 +178,7 @@ namespace Override.AI
 
                 currentPath = hasLineOfSight && HasClearDirectPath(snapshot.PlayerPosition)
                     ? new List<Vector3> { snapshot.PlayerPosition }
-                    : FindPath(transform.position, predictedTarget, snapshot.PlayerForward) ?? new List<Vector3>();
+                    : FindPath(transform.position, currentTarget, snapshot.PlayerForward) ?? new List<Vector3>();
             }
 
             if (currentPath != null && currentPath.Count > 0)
@@ -149,7 +188,7 @@ namespace Override.AI
             else
             {
                 cmd.Path = allowDirectChaseFallback
-                    ? new Vector3[] { predictedTarget }
+                    ? new Vector3[] { currentTarget }
                     : new Vector3[] { transform.position };
             }
 
@@ -394,11 +433,38 @@ namespace Override.AI
             return Mathf.Clamp01((dot + 1f) / 2f);
         }
 
-        private Vector3 GetPredictedTarget(Vector3 playerPos, bool hasLineOfSight)
+        private void UpdateTargetKnowledge(Vector3 playerPos, bool hasLineOfSight)
         {
-            if (terminals == null || terminals.Length == 0) return playerPos;
+            if (hasLineOfSight)
+            {
+                lastSeenPlayerPosition = playerPos;
+                timeSinceLosLost = 0f;
+            }
+            else
+            {
+                timeSinceLosLost += Time.deltaTime;
+            }
+        }
 
-            Transform closestTerminal = null;
+        private bool ShouldUseTerminalAmbush(
+            Vector3 playerPos,
+            bool hasLineOfSight,
+            out Transform closestTerminal)
+        {
+            closestTerminal = null;
+
+            if (hasLineOfSight || timeSinceLosLost < LostSightToAmbushDelay) return false;
+
+            closestTerminal = GetClosestTerminal(playerPos);
+            return closestTerminal != null &&
+                   Vector3.Distance(playerPos, closestTerminal.position) < TerminalAmbushRange;
+        }
+
+        private Transform GetClosestTerminal(Vector3 playerPos)
+        {
+            if (terminals == null || terminals.Length == 0) return null;
+
+            Transform closest = null;
             float minDist = Mathf.Infinity;
 
             foreach (Transform term in terminals)
@@ -409,16 +475,11 @@ namespace Override.AI
                 if (dist < minDist)
                 {
                     minDist = dist;
-                    closestTerminal = term;
+                    closest = term;
                 }
             }
 
-            if (!hasLineOfSight && closestTerminal != null && minDist < 15f)
-            {
-                return closestTerminal.position;
-            }
-
-            return playerPos;
+            return closest;
         }
     }
 }
