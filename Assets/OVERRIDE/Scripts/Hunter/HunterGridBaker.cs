@@ -35,6 +35,7 @@ namespace Override.Hunter
 
         public static HunterGrid Bake(Options o, out float floorTop)
         {
+            var timer = System.Diagnostics.Stopwatch.StartNew();   // bake time, for the optimization evidence
             var floors = FindFloors(o.LevelRoot);
             if (floors.Length == 0)
             {
@@ -73,7 +74,8 @@ namespace Override.Hunter
 
             Debug.Log($"[Hunter] Links: {playerLinks} player, {hunterLinks} Seeker (walls between cells are respected).");
             Debug.Log($"[Hunter] Grid {w} x {h} cells of {o.CellSize} m: {playerCells} player-walkable, " +
-                      $"{hunterCells} Seeker-walkable ({playerCells - hunterCells} crouch-only, e.g. vents).");
+                      $"{hunterCells} Seeker-walkable ({playerCells - hunterCells} crouch-only, e.g. vents). " +
+                      $"Baked in {timer.Elapsed.TotalMilliseconds:0} ms.");
             return grid;
         }
 
