@@ -105,7 +105,7 @@ namespace Override.AI
                         Path = new Vector3[] { bayExitWaypoint },
                         LookTarget = bayExitWaypoint,
                         Fire = false,
-                        AnimationIntent = "Hover"
+                        AnimationIntent = "ExitBay"
                     };
 
                     DrawCurrentPath();
