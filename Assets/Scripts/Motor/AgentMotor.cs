@@ -50,6 +50,14 @@ namespace Override.Motor
             brain = GetComponent<IAgentBrain>();
             visuals = GetComponentInChildren<WispVisuals>(true);
 
+            if (visuals != null)
+            {
+                controller.height = 1.2f;
+                controller.radius = 0.45f;
+                controller.center = Vector3.zero;
+                controller.skinWidth = 0.04f;
+            }
+
             if (Mathf.Approximately(fireInterval, 1f)) fireInterval = 0.33f;
             if (canShoot) CreateBeam();
         }
@@ -94,6 +102,7 @@ namespace Override.Motor
             };
 
             AgentCommand command = brain.Tick(currentSnapshot);
+            bool isExitingBay = command.AnimationIntent == "ExitBay";
 
             if (canShoot && command.Fire && Time.time >= nextFireTime)
             {
@@ -134,8 +143,11 @@ namespace Override.Motor
                     planarDirection = Vector3.zero;
                 }
 
+                float desiredHeight = isExitingBay
+                    ? Mathf.Min(transform.position.y, hoverHeight)
+                    : hoverHeight;
                 float verticalSpeed = Mathf.Clamp(
-                    (hoverHeight - transform.position.y) * 2f,
+                    (desiredHeight - transform.position.y) * 2f,
                     -moveSpeed,
                     moveSpeed);
                 Vector3 velocity = planarDirection * moveSpeed + Vector3.up * verticalSpeed;
@@ -152,7 +164,7 @@ namespace Override.Motor
                     new Vector3(transform.position.x, 0, transform.position.z),
                     new Vector3(targetPoint.x, 0, targetPoint.z));
 
-                if (!command.Fire)
+                if (!command.Fire && !isExitingBay)
                 {
                     if ((targetPoint - lastStuckTarget).sqrMagnitude > 0.25f)
                     {
