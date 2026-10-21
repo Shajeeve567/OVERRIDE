@@ -16,6 +16,7 @@ namespace Override.Motor
         private IAgentBrain brain;
         private CharacterController controller;
         private Transform playerTransform;
+        private WispVisuals visuals;
 
         private int currentPathIndex = 0;
         private Vector3 lastPathFirstNode = Vector3.zero;
@@ -26,6 +27,7 @@ namespace Override.Motor
         {
             controller = GetComponent<CharacterController>();
             brain = GetComponent<IAgentBrain>();
+            visuals = GetComponentInChildren<WispVisuals>(true);
         }
 
         private void Start()
@@ -114,6 +116,8 @@ namespace Override.Motor
             Vector3 toPlayer = playerTransform.position - origin;
 
             if (toPlayer.sqrMagnitude < 0.0001f) return;
+
+            if (visuals != null) visuals.PlayAttack();
 
             Vector3 direction = toPlayer.normalized;
             float distance = toPlayer.magnitude;

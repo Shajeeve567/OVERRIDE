@@ -51,6 +51,8 @@ namespace Override.Motor
             currentHealth = Mathf.Max(0f, currentHealth - amount);
             Debug.Log("[Wisp] Took " + amount + " damage. Health: " + currentHealth);
 
+            if (wispVisuals != null) wispVisuals.PlayHurt();
+
             if (currentHealth <= 0f) Die();
         }
 
@@ -76,7 +78,7 @@ namespace Override.Motor
             if (wispVisuals != null)
             {
                 wispVisuals.SetVisible(true);
-                wispVisuals.enabled = false;
+                wispVisuals.PlayDeath();
             }
 
             if (characterController != null) characterController.enabled = false;
