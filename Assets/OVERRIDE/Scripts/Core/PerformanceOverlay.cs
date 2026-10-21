@@ -90,7 +90,8 @@ namespace Override.Core
 
         void OnGUI()
         {
-            if (visible) GUI.Box(new Rect(Screen.width - 420, Screen.height - 140, 410, 120), text);
+            // Bottom left, above the HUD's health panel (the ammo panel owns the bottom right).
+            if (visible) GUI.Box(new Rect(24, Screen.height - 250, 410, 120), text);
         }
     }
 }

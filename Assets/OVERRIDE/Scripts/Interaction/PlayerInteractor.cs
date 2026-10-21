@@ -118,7 +118,7 @@ namespace Override.Interaction
         // Placeholder prompt; the HUD (feature/game-flow) replaces this.
         void OnGUI()
         {
-            if (debugRay) GUI.Label(new Rect(20, Screen.height - 70, 600, 25), debugText);   // above the HP text, clear of the Director panel
+            if (debugRay) GUI.Label(new Rect(24, Screen.height - 120, 600, 25), debugText);   // above the HUD's health panel
             if (!showPrompt || lookedAt == null || !lookedAt.CanInteract || holding != null) return;
             const float w = 300f, h = 30f;
             GUI.Label(new Rect((Screen.width - w) / 2f, Screen.height / 2f + 40f, w, h), "[E] " + lookedAt.Prompt);
