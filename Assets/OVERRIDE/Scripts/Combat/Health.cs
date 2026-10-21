@@ -34,6 +34,10 @@ namespace Override.Combat
         public event Action Died;
         public event Action Healed;
 
+        // For diagnosing unexpected deaths: what hit it last, and where from.
+        float lastHitAmount;
+        Vector3 lastHitPoint;
+
         void Awake() => Current = maxHealth;
 
         /// Set up from code (e.g. the integration tool or a spawner) before the first hit.
@@ -48,6 +52,8 @@ namespace Override.Combat
         {
             if (IsDead || amount <= 0f) return;
 
+            lastHitAmount = amount;
+            lastHitPoint = hitPoint;
             if (!godMode) Current = Mathf.Max(0f, Current - amount);
             Damaged?.Invoke(amount, hitPoint);
             if (isPlayer) GameEvents.RaisePlayerDamaged(amount);
@@ -80,6 +86,9 @@ namespace Override.Combat
                 GameEvents.RaisePlayerDied();
                 return;   // the player object stays; PlayerDeath freezes it and game flow shows the lose screen
             }
+            // The Console entry's stack trace shows which script dealt the killing blow.
+            Debug.Log($"[Health] {name} died: last hit {lastHitAmount:0} damage at {lastHitPoint} " +
+                      $"(it was at {transform.position}, {Vector3.Distance(lastHitPoint, transform.position):0.0} m away)", this);
             if (dropOnDeath != null) Instantiate(dropOnDeath, transform.position + Vector3.up * 0.3f, Quaternion.identity);
             if (destroyOnDeath) Destroy(gameObject);
             else if (disableOnDeath) gameObject.SetActive(false);
