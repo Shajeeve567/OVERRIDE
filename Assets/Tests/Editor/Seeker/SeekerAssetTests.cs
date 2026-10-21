@@ -70,5 +70,45 @@ namespace Override.SeekerAssets.Tests
             }
         }
 
+        [Test]
+        public void WeakPointMeshCollider_MatchesRenderedSensorCoreBounds()
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+            GameObject instance = Object.Instantiate(prefab);
+            try
+            {
+                Transform source = instance.GetComponentsInChildren<Transform>(true)
+                    .Single(value => value.name == "SensorCore_WeakPoint");
+                Transform proxy = instance.GetComponentsInChildren<Transform>(true)
+                    .Single(value => value.name == "SensorCore_WeakPoint_Collider");
+                MeshCollider collider = proxy.GetComponent<MeshCollider>();
+                Assert.That(collider, Is.Not.Null);
+                MeshFilter filter = source.GetComponent<MeshFilter>();
+                Renderer renderer = source.GetComponent<Renderer>();
+                Physics.SyncTransforms();
+
+                Assert.That(filter, Is.Not.Null);
+                Assert.That(renderer, Is.Not.Null);
+                Assert.That(collider.sharedMesh, Is.SameAs(filter.sharedMesh));
+                Assert.That(proxy.GetComponents<MonoBehaviour>()
+                    .Any(component => component.GetType().Name == "SeekerWeakPoint"), Is.True);
+                MonoBehaviour references = instance.GetComponents<MonoBehaviour>()
+                    .Single(component => component.GetType().Name == "SeekerVisualReferences");
+                SerializedObject data = new SerializedObject(references);
+                Assert.That(data.FindProperty("_sensorCore").objectReferenceValue, Is.Not.Null);
+                Assert.That(data.FindProperty("_sensorHousing").objectReferenceValue, Is.Not.Null);
+                Assert.That(data.FindProperty("_weakPoint").objectReferenceValue, Is.SameAs(proxy));
+                Assert.That(data.FindProperty("_leftThruster").objectReferenceValue, Is.Not.Null);
+                Assert.That(data.FindProperty("_rightThruster").objectReferenceValue, Is.Not.Null);
+                Assert.That(collider.bounds.size.x, Is.EqualTo(renderer.bounds.size.x).Within(0.005f));
+                Assert.That(collider.bounds.size.y, Is.EqualTo(renderer.bounds.size.y).Within(0.005f));
+                Assert.That(collider.bounds.size.z, Is.EqualTo(renderer.bounds.size.z).Within(0.005f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(instance);
+            }
+        }
+
     }
 }
