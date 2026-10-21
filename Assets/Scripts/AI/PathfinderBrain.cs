@@ -11,13 +11,9 @@ namespace Override.AI
     {
         private const float AttackRange = 12f;
 
-        [Header("No-Graph Fallback")]
-        [SerializeField, Tooltip("Debug fallback: chase the predicted target directly when the scene has no WaypointGraph. Ignored once a populated graph exists.")]
-        private bool allowDirectChaseWithoutGraph = true;
+        [SerializeField] private bool allowDirectChaseFallback = true;
 
-        private readonly Vector3[] fallbackPath = new Vector3[1];
         private WispVisuals wispVisuals;
-        private bool warnedNoGraph;
 
         private List<Vector3> currentPath = new List<Vector3>();
         private float lastPathTime = 0f;
@@ -106,25 +102,9 @@ namespace Override.AI
             }
             else
             {
-                bool noGraph = WaypointGraph.Instance == null ||
-                               WaypointGraph.Instance.nodes == null ||
-                               WaypointGraph.Instance.nodes.Count == 0;
-
-                if (allowDirectChaseWithoutGraph && noGraph)
-                {
-                    fallbackPath[0] = predictedTarget;
-                    cmd.Path = fallbackPath;
-
-                    if (!warnedNoGraph)
-                    {
-                        warnedNoGraph = true;
-                        Debug.LogWarning("[Wisp] No waypoint graph available - using direct chase fallback.");
-                    }
-                }
-                else
-                {
-                    cmd.Path = new Vector3[] { transform.position };
-                }
+                cmd.Path = allowDirectChaseFallback
+                    ? new Vector3[] { snapshot.PlayerPosition }
+                    : new Vector3[] { transform.position };
             }
 
             cmd.LookTarget = snapshot.PlayerPosition;
