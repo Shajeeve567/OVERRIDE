@@ -43,6 +43,12 @@ namespace Override.Hunter
         [SerializeField] float bobFrequency = 1.5f;
         [SerializeField] float obstacleRefreshInterval = 1f;
 
+        [Header("Close combat")]
+        [Tooltip("With proximity contact, fly straight at the player and hold this far from their chest.")]
+        [SerializeField] float standOffDistance = 1.4f;
+        [SerializeField] float lungeDistance = 0.9f;     // how far the orb visibly darts forward on a hit
+        [SerializeField] float lungeSeconds = 0.25f;
+
         static readonly ProfilerMarker TickMarker = new ProfilerMarker("Hunter.Tick");
 
         HunterBrain brain;
@@ -72,6 +78,7 @@ namespace Override.Hunter
         Vector3 progressAnchor;
         float progressTime;
         Vector3 visualRest;
+        float lungeStart = -10f;
 
         public HunterBrain Brain => brain;
         public HunterSettings Settings => settings;
@@ -251,6 +258,7 @@ namespace Override.Hunter
             if (!command.Fire || Time.time < nextAttack || playerDamageable == null || player == null) return;
             if (Vector3.Distance(transform.position, player.position + Vector3.up) > settings.AttackRange) return;
             nextAttack = Time.time + settings.AttackCooldown;
+            lungeStart = Time.time;   // the visible dart forward (LateUpdate)
             playerDamageable.TakeDamage(settings.AttackDamage, player.position + Vector3.up, transform.forward);
         }
 
@@ -269,6 +277,16 @@ namespace Override.Hunter
                 target = new Vector3(p.x, p.y + hoverHeight, p.z);
                 Vector2 flat = new Vector2(target.x - pos.x, target.z - pos.z);
                 if (flat.magnitude < 0.4f) pathIndex++;
+            }
+
+            // Contact (within 3 m, line of sight confirmed by the sense): skip the grid for the last metres and
+            // close straight in, so the lunge range is always reached. Holds a short stand-off distance.
+            if (brain.HasContact && player != null)
+            {
+                Vector3 chest = player.position + Vector3.up;
+                Vector3 toward = chest - pos;
+                float d = toward.magnitude;
+                target = d > standOffDistance ? pos + toward / d * (d - standOffDistance) : pos;
             }
 
             Vector3 next = Vector3.MoveTowards(pos, target, brain.DesiredSpeed * dt);
@@ -301,8 +319,12 @@ namespace Override.Hunter
 
         void LateUpdate()
         {
-            if (visual != null)
-                visual.localPosition = visualRest + Vector3.up * (Mathf.Sin(Time.time * bobFrequency * 2f * Mathf.PI) * bobAmplitude);
+            if (visual == null) return;
+            Vector3 bob = Vector3.up * (Mathf.Sin(Time.time * bobFrequency * 2f * Mathf.PI) * bobAmplitude);
+            // Lunge: dart forward and back along the facing direction (the Seeker faces the player in contact).
+            float t = (Time.time - lungeStart) / lungeSeconds;
+            Vector3 lunge = t >= 0f && t <= 1f ? Vector3.forward * (Mathf.Sin(t * Mathf.PI) * lungeDistance) : Vector3.zero;
+            visual.localPosition = visualRest + bob + lunge;
         }
     }
 }
