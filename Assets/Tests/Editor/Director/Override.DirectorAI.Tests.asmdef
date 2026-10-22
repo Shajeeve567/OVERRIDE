@@ -1,0 +1,21 @@
+{
+    "name": "Override.DirectorAI.Tests",
+    "rootNamespace": "Override.DirectorAI.Tests",
+    "references": [
+        "Override.DirectorAI"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

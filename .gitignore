@@ -44,6 +44,7 @@
 
 # Visual Studio cache directory
 .vs/
+/.vscode/
 
 # Gradle cache directory
 .gradle/
@@ -112,3 +113,9 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Files moved out of Assets for review before deleting
+/_to_delete/
+
+# Local assignment briefs and planning context (not part of the Unity project)
+/Ilzam's Agent Context/
