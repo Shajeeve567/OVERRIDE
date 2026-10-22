@@ -1,5 +1,7 @@
-public interface IAgentBrain
+namespace Override.Core
 {
-    // The pure C# logic that calculates what to do. No Unity physics/transforms here.
-    AgentCommand Tick(WorldSnapshot snapshot);
+    public interface IAgentBrain
+    {
+        AgentCommand Tick(WorldSnapshot snapshot);
+    }
 }
