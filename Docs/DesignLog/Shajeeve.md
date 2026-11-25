@@ -3,8 +3,6 @@
 **Roles:** World Builder (SE3032 Graphics & Visualization) and the Director / ARGUS Core agent (SE3062 Intelligent Systems).
 **Code:** Director brain in `Assets/Scripts/AI/Director/` (own assembly, `Override.DirectorAI`), its scene side in `Assets/Scripts/Director/`, level contracts in `Assets/Scripts/Level/`, tests in `Assets/Tests/Editor/Director/`, level-building tools in `Assets/Editor/`.
 
-> Lines marked **TODO (Shaj)** still need my own account.
-
 ---
 
 ## 1. What I built
