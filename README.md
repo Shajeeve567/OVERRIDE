@@ -101,10 +101,10 @@ Tests/
 
 | Member | Graphics role | IS agent |
 |---|---|---|
-| [Name] | World Builder | Director (ARGUS Core) |
-| [Name] | Systems Engineer | Hunter (Seeker) |
-| [Name] | Core Developer | Duelist (Warden) |
-| [Name] | Agent Controller | Pathfinder (Wisp) |
+| Shajeeve B | World Builder | Director (ARGUS Core) |
+| Gunitha R  | Systems Engineer | Hunter (Seeker) |
+| Ilzam M    | Core Developer | Duelist (Warden) |
+| Rithish K  | Agent Controller | Pathfinder (Wisp) |
 
 ## Built with
 
